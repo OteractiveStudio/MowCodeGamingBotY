@@ -20,6 +20,8 @@
 import { SlashCommandBuilder, EmbedBuilder, InteractionContextType } from "discord.js";
 
 import { respond } from "../../bot/respond.js";
+import { guildLang } from "../../bot/locale.js";
+import { translator } from "../../../lib/i18n.js";
 import { ensurePlayer } from "../../data/player.js";
 import {
     FEEDBACK_RULES,
@@ -64,10 +66,25 @@ export default {
 
 async function submit(interaction, ctx) {
     const raw = interaction.options.getString("msg");
+    const s = translator(await guildLang(ctx, interaction.guildId));
 
     const problem = validateMessage(raw);
     if (problem) {
-        await respond(interaction, { content: `**${problem.message}.**` });
+        // The data layer returns a CODE as well as English, so the message a user reads comes
+        // from the catalogue while the code stays stable for tests and logs.
+        const key =
+            problem.code === "EMPTY"
+                ? "feedback.empty"
+                : problem.code === "TOO_SHORT"
+                  ? "feedback.too_short"
+                  : "feedback.too_long";
+        await respond(interaction, {
+            content: s(key, {
+                min: FEEDBACK_RULES.MIN_LENGTH,
+                max: FEEDBACK_RULES.MAX_LENGTH,
+                length: normaliseMessage(raw).length,
+            }),
+        });
         return;
     }
 
@@ -76,11 +93,7 @@ async function submit(interaction, ctx) {
     // spamming would try again.
     const recent = await countRecent(ctx.db, interaction.user.id);
     if (recent >= FEEDBACK_RULES.MAX_PER_WINDOW) {
-        await respond(interaction, {
-            content:
-                `**That is ${recent} pieces of feedback in the last hour, which is the limit.** ` +
-                "Nothing is lost — it is all recorded. Come back in a bit if there is more.",
-        });
+        await respond(interaction, { content: s("feedback.rate_limited", { count: recent }) });
         await ctx.log(
             `feedback: ${interaction.user.id} hit the rate limit (${recent} in the window)`,
             "warning",
@@ -105,18 +118,21 @@ async function submit(interaction, ctx) {
 
     const embed = new EmbedBuilder()
         .setColor(0x2ecc71)
-        .setTitle("📮 Feedback recorded")
-        .setDescription("Thank you — it is in the database and the maintainers will see it.")
+        .setTitle(`📮 ${s("feedback.title")}`)
+        .setDescription(s("feedback.thanks"))
         .addFields(
-            { name: "What you said", value: message.length > 900 ? `${message.slice(0, 900)}…` : message },
-            { name: "Reference", value: `\`#${stored.rolling_id}\``, inline: true },
             {
-                name: "Left this hour",
+                name: s("feedback.your_message"),
+                value: message.length > 900 ? `${message.slice(0, 900)}…` : message,
+            },
+            { name: s("feedback.reference"), value: `\`#${stored.rolling_id}\``, inline: true },
+            {
+                name: s("feedback.remaining"),
                 value: `${Math.max(0, FEEDBACK_RULES.MAX_PER_WINDOW - recent - 1)}`,
                 inline: true,
             },
         )
-        .setFooter({ text: "Only you can see this message." });
+        .setFooter({ text: s("feedback.private") });
 
     await respond(interaction, { embeds: [embed] });
 

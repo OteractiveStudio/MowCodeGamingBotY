@@ -66,3 +66,35 @@ export async function getGuild(db, guildId) {
 export async function countActiveGuilds(db) {
     return db.mst_guild.count({ where: { left_at: null } });
 }
+
+/**
+ * Write one or more settings. Only the keys present in `changes` are touched.
+ *
+ * ⚠️ `COALESCE(:key, column)` rather than building the SET clause from the caller's keys. String
+ * concatenation into SQL is how the legacy's data editor worked (`data[target][set] = set_to`
+ * straight from user input) and it is not a habit worth carrying into a language where the
+ * placeholder version is this short.
+ *
+ * Returns the updated row, or null if the guild has no row yet — the caller provisions first.
+ */
+export async function setGuildSettings(db, guildId, changes = {}) {
+    const rows = await db.sequelize.query(
+        `
+        UPDATE ${db.schema}.mst_guild
+           SET lang       = COALESCE(:lang, lang),
+               prefix     = COALESCE(:prefix, prefix),
+               updated_at = now()
+         WHERE guild_id = :guild_id
+        RETURNING *
+        `,
+        {
+            replacements: {
+                guild_id: String(guildId),
+                lang: changes.lang ?? null,
+                prefix: changes.prefix ?? null,
+            },
+            type: db.sequelize.constructor.QueryTypes.SELECT,
+        },
+    );
+    return rows[0] ?? null;
+}

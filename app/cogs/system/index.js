@@ -7,9 +7,11 @@
  */
 
 import { respond } from "../../bot/respond.js";
-import { Events, SlashCommandBuilder, ActivityType } from "discord.js";
+import { Events, SlashCommandBuilder, ActivityType, EmbedBuilder } from "discord.js";
 
 import { log } from "../../../lib/utility.js";
+import { guildLang } from "../../bot/locale.js";
+import { translator } from "../../../lib/i18n.js";
 
 export default {
     name: "system",
