@@ -93,7 +93,29 @@ export async function startBot({ config, db }) {
     return { client, cogs, commands, ctx };
 }
 
+/**
+ * ⚠️ Voice connections are torn down BEFORE the gateway closes. His restart did
+ * `for i in client.voice_clients: await i.disconnect()` for the same reason: a connection left
+ * open means the bot appears to be sitting in the channel after the process is gone, until
+ * Discord times it out.
+ */
+/**
+ * ⚠️ VOICE GOES FIRST. His restart did `for i in client.voice_clients: await i.disconnect()` for
+ * the same reason, and it was right: destroying the client without leaving voice means the bot
+ * appears to still be sitting in the channel until Discord times the connection out — so a
+ * restart looks like a ghost that is present but silent.
+ *
+ * Failing to leave must not stop the shutdown, so it is logged and the client is destroyed anyway.
+ */
 export async function stopBot(client) {
+    try {
+        const { leaveAllVoice } = await import("./voice.js");
+        const left = await leaveAllVoice();
+        if (left > 0) await log(`left ${left} voice channel(s) before shutting down`, import.meta.url);
+    } catch (err) {
+        await log(`could not leave voice cleanly: ${err.message}`, "warning", import.meta.url);
+    }
+
     if (client) {
         await client.destroy();
     }
