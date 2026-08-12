@@ -73,6 +73,10 @@ export function validateCog(cog, expectedName) {
     if (cog.commands !== undefined && !Array.isArray(cog.commands)) {
         problems.push(`${expectedName}: commands must be an array`);
     }
+    // Optional, but a cog whose buttons route nowhere is worth catching at load.
+    if (cog.handleComponent !== undefined && typeof cog.handleComponent !== "function") {
+        problems.push(`${expectedName}: handleComponent must be a function`);
+    }
     if (cog.events !== undefined && !Array.isArray(cog.events)) {
         problems.push(`${expectedName}: events must be an array`);
     }

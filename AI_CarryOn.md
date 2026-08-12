@@ -110,22 +110,34 @@ in a reference doc gets broken by the next agent that does not open it.
 - ❌ **No HTTP surface** — removed deliberately, see DECIDED.
 - ❌ **No supervisor, no launcher scripts.** The process exits with a real code and never restarts itself.
 
-## 🔴 SECURITY — the legacy tokens are LIVE, confirmed by testing
+## ⚠️ The legacy tokens are VALID — but not leaked. Corrected by Ote, 2026-08-12
 
-⚠️ This is stronger than the earlier records, which said only *"reset them."* On **2026-08-12** both were
-tested against Discord's API and **both still authenticate, five years on:**
+⚠️ **This section used to be headed "🔴 SECURITY — the legacy tokens are LIVE" and said that "anyone who has
+ever seen that tree" could control both bots.** Ote corrected the premise: *"the token is not leaked. that old
+code never been anywhere from my old pc, so no worry."* He knows where his code has been; that risk assessment
+was mine and it was wrong.
+
+**What is still true, and was verified by testing:** both tokens **authenticate today**, they are **hardcoded
+in source**, and they exist in **13,652 `.history` copies**. **What is NOT true:** that they are exposed. The
+tree has never left his machine.
+
+⇒ So this is *exposed-in-waiting*, not compromised: it only becomes a real problem if that tree is ever
+published, pushed, or copied to a shared machine — which is exactly why the legacy stays **outside** this repo
+and `Reference/repos/MyBot_Legacy/` remains ungitted. Resetting the tokens is now **optional hygiene, not an
+emergency.**
 
 | Bot | Id | Guilds | Token sits in |
 |---|---|---|---|
 | **MowCodeGamingBot** | `892820973030637608` | **10** | `TOKEN_MCGB.txt` (legacy root **and** `BN_bot/data/token/`) |
 | **Sompade** | `862330157157974088` | **4** | **hardcoded in source**, `Gaming Bot/CsGamingBot.py:41` |
 
-⛔ **Both must be reset in the developer portal.** Anyone who has ever seen that tree — or any of the 13,652
-`.history` copies — can control both bots in 14 guild memberships, some with 100–244 members.
+⇒ **These are usable right now.** ⭐ Simplest route to a working bot: copy the `TOKEN_MCGB.txt` value into
+`config.json` → the new code runs as **the same MowCodeGamingBot, in the same 10 servers**. No new application,
+no re-invite. (Optionally reset it in the portal first and paste the new one — same effort, cleaner.)
 
-⚠️ **The legacy token was deliberately NOT written into `config.json`.** It was read from the frozen tree,
-used in memory for the one online test, and no copy was created. **Do not adopt a compromised credential as
-this project's operating credential** — the new bot gets its own application.
+⚠️ **The token is still NOT committed anywhere.** `config.json` is gitignored; during the online test it was
+read from the frozen tree and used in memory with no copy created. That rule does not change just because the
+exposure risk turned out to be lower than recorded: **a token never goes in a tracked file.**
 
 ## ⭐ DECIDED — Ote
 

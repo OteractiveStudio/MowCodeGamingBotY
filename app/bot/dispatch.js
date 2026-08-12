@@ -36,6 +36,37 @@ export function attachCommandDispatch(client, commands, ctx) {
             return;
         }
 
+        // Buttons, select menus and modals — the components that replace the legacy's
+        // emoji-reaction UIs. Routed by a `<cog>:<action>[:extra]` customId, so a cog owns
+        // its own controls and no central switch grows a case per game.
+        if (interaction.isButton() || interaction.isAnySelectMenu() || interaction.isModalSubmit()) {
+            const cogName = String(interaction.customId ?? "").split(":")[0];
+            const cog = (ctx.cogs ?? []).find((candidate) => candidate.name === cogName);
+
+            if (typeof cog?.handleComponent !== "function") {
+                await log(
+                    `no component handler for customId "${interaction.customId}" — ` +
+                    `is cog "${cogName}" loaded, and does it export handleComponent()?`,
+                    "warning",
+                    import.meta.url,
+                );
+                await safeReply(interaction, "That control isn't wired up on this build.");
+                return;
+            }
+
+            try {
+                await cog.handleComponent(interaction, ctx);
+            } catch (err) {
+                await log(
+                    `cog "${cogName}" threw handling component "${interaction.customId}": ${err.stack || err.message}`,
+                    "error",
+                    import.meta.url,
+                );
+                await safeReply(interaction, "Something broke handling that. It's been logged.");
+            }
+            return;
+        }
+
         if (!interaction.isChatInputCommand()) return;
 
         const entry = commands.get(interaction.commandName);
