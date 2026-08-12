@@ -92,48 +92,77 @@ export default [
         },
     },
     {
-        label: "the SQL migration declares every table the models expect",
+        label: "the SQL migrations declare every table the models expect",
         fn: () => {
             const { models } = buildModels();
-            const sqlPath = path.resolve(
-                projectRootPath(),
-                "database",
-                "migrations",
-                "001_core.sql",
-            );
-            const sql = fs.readFileSync(sqlPath, "utf-8");
+            const sql = allMigrationSql();
 
             for (const key of Object.keys(models)) {
                 assert.ok(
                     sql.includes(`{{schema}}.${key} (`),
-                    `001_core.sql has no CREATE TABLE for "${key}" — the SQL is the source of truth, so a model without one is a model of nothing`,
+                    `no CREATE TABLE for "${key}" in any migration — the SQL is the source of truth, so a model without one is a model of nothing`,
                 );
             }
         },
     },
     {
-        label: "the migration hardcodes no schema name — only the {{schema}} placeholder",
+        label: "no migration hardcodes a schema name — only the {{schema}} placeholder",
         fn: () => {
-            const sqlPath = path.resolve(
-                projectRootPath(),
-                "database",
-                "migrations",
-                "001_core.sql",
-            );
-            const sql = fs.readFileSync(sqlPath, "utf-8");
+            for (const { name, sql } of migrationFiles()) {
+                // Strip comment lines before looking: a header is allowed to explain
+                // the rule it is enforcing.
+                const statements = sql
+                    .split("\n")
+                    .filter((line) => !line.trimStart().startsWith("--"))
+                    .join("\n");
 
-            // Strip comment lines before looking: the header explains the rule and
-            // is allowed to mention it.
-            const statements = sql
-                .split("\n")
-                .filter((line) => !line.trimStart().startsWith("--"))
-                .join("\n");
+                assert.ok(
+                    !/mowcodegamingbot_y/i.test(statements),
+                    `${name} hardcodes the schema name — it must come from config via {{schema}}`,
+                );
+                assert.ok(
+                    statements.includes("{{schema}}"),
+                    `${name} never uses the {{schema}} placeholder`,
+                );
+            }
+        },
+    },
+    {
+        label: "every foreign key points at a schema-qualified table",
+        fn: () => {
+            // An unqualified REFERENCES resolves through search_path, which is how a
+            // table in the wrong schema gets silently referenced.
+            for (const { name, sql } of migrationFiles()) {
+                const bare = sql
+                    .split("\n")
+                    .filter((line) => !line.trimStart().startsWith("--"))
+                    .filter((line) => /REFERENCES\s+(?!\{\{schema\}\})/i.test(line));
 
-            assert.ok(
-                !/mowcodegamingbot_y/i.test(statements),
-                "001_core.sql hardcodes the schema name — it must come from config via {{schema}}",
-            );
-            assert.ok(statements.includes("{{schema}}"), "the {{schema}} placeholder is missing");
+                assert.equal(
+                    bare.length,
+                    0,
+                    `${name} has an unqualified REFERENCES:\n        ${bare.join("\n        ")}`,
+                );
+            }
         },
     },
 ];
+
+function migrationsDir() {
+    return path.resolve(projectRootPath(), "database", "migrations");
+}
+
+function migrationFiles() {
+    const directory = migrationsDir();
+    return fs
+        .readdirSync(directory)
+        .filter((name) => name.endsWith(".sql"))
+        .sort()
+        .map((name) => ({ name, sql: fs.readFileSync(path.join(directory, name), "utf-8") }));
+}
+
+function allMigrationSql() {
+    return migrationFiles()
+        .map(({ sql }) => sql)
+        .join("\n");
+}

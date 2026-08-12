@@ -10,7 +10,8 @@
     "db:migrate": "node database/scripts/migrate.js",
     "bot:register": "node scripts/register-commands.js",
     "test": "node test/pipeline/test-all.mjs",
-    "test:unit": "node test/pipeline/test-all.mjs --unit-only"
+    "test:unit": "node test/pipeline/test-all.mjs --unit-only",
+    "db:seed": "node database/scripts/seed.js"
   },
   "keywords": [
     "discord",
