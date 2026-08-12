@@ -62,15 +62,24 @@ export function emptyBoard() {
     return Array(9).fill(null);
 }
 
-/** His cell labels: row and column, both 1-indexed — "11" through "33". */
+/**
+ * Cell labels **1–9**, reading left to right, top to bottom.
+ *
+ * ⚠️ Ote, 2026-08-13: *"as we use ui, we can improve this. use 1 2 3 4 5 6 7 8 9 so it look
+ * cleaner."* His original labelled cells `11`–`33` — row then column — and it had to, because you
+ * TYPED the coordinate into the channel and the bot parsed it. On a grid of buttons you click the
+ * square you mean, so encoding the row in the label buys nothing and costs a digit.
+ *
+ * The old row-column form is therefore gone rather than kept "for reference": nothing parses a
+ * typed cell any more, so a second numbering would just be a second thing to get wrong.
+ */
 export function cellLabel(index) {
-    return `${Math.floor(index / 3) + 1}${(index % 3) + 1}`;
+    return String(index + 1);
 }
 
-export function labelToIndex(label) {
-    const text = String(label);
-    if (!/^[1-3][1-3]$/.test(text)) return -1;
-    return (Number(text[0]) - 1) * 3 + (Number(text[1]) - 1);
+/** Row and column, for a message that wants to say *where* rather than *which*. */
+export function cellPosition(index) {
+    return { row: Math.floor(index / 3) + 1, column: (index % 3) + 1 };
 }
 
 /** The winning mark and the line that did it, or null. */
@@ -128,9 +137,10 @@ export function validateOxStart({ bet, withBot, challengerBalance, opponentBalan
 
     if (bet === 0) return null; // A friendly game needs no coins at all.
 
-    if (challengerBalance < bet) {
-        return { code: "CANNOT_AFFORD", message: `you have ${challengerBalance}, not enough to bet ${bet}` };
-    }
+    // ⚠️ ORDER MATTERS, and his order was right: bankruptcy is checked BEFORE affordability. A
+    // player at −50 cannot afford anything, so an affordability-first check would always answer
+    // "you have -50, not enough to bet 10" and never explain that they are bankrupt. Caught by a
+    // test asserting the code, not the message.
     if (challengerBalance <= BAD_ECON_THRESHOLD) {
         return {
             code: "BANKRUPT",
@@ -148,12 +158,17 @@ export function validateOxStart({ bet, withBot, challengerBalance, opponentBalan
                 message: `your opponent is below ${BAD_ECON_THRESHOLD} coins`,
             };
         }
-        if (opponentBalance < bet) {
-            return {
-                code: "OPPONENT_CANNOT_AFFORD",
-                message: `your opponent only has ${opponentBalance}, so the most you can bet is ${opponentBalance}`,
-            };
-        }
+    }
+
+    if (challengerBalance < bet) {
+        return { code: "CANNOT_AFFORD", message: `you have ${challengerBalance}, not enough to bet ${bet}` };
+    }
+
+    if (!withBot && opponentBalance < bet) {
+        return {
+            code: "OPPONENT_CANNOT_AFFORD",
+            message: `your opponent only has ${opponentBalance}, so the most you can bet is ${opponentBalance}`,
+        };
     }
 
     return null;

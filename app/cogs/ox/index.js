@@ -116,12 +116,12 @@ export default {
 
 /** His `OX_print_board`: a text grid, kept because it reads well in the scrollback. */
 function textBoard(board) {
+    // Every cell is one character now that labels are 1–9, so the grid actually lines up and
+    // can have proper rules between the squares. His version was bare numbers in a code block
+    // because the labels were two digits wide and a grid would not have aligned.
     const cell = (index) => board[index] ?? cellLabel(index);
-    return (
-        "```\n" +
-        [0, 3, 6].map((row) => [0, 1, 2].map((offset) => ` ${cell(row + offset)}`).join(" ")).join("\n") +
-        "\n```"
-    );
+    const row = (start) => ` ${cell(start)} │ ${cell(start + 1)} │ ${cell(start + 2)} `;
+    return ["```", row(0), "───┼───┼───", row(3), "───┼───┼───", row(6), "```"].join("\n");
 }
 
 function boardRows(game, { finished = false, winningLine = null } = {}) {
