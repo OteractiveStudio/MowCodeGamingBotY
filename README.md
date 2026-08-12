@@ -32,6 +32,8 @@ whole-file read-modify-write      →   one atomic statement per mutation
 | `/guess start` · `try` · `rules` | Guess the number — **type a bare number in chat**, 7 shared attempts |
 | `/ox play` · `rules` | Noughts and crosses on a **3×3 button grid**, vs the bot or a duel |
 | `/steal` · `/crime` | Rob someone, if you own the tools. `/crime` explains the odds |
+| `/coinflip` | Call heads or tails — **type `h`, `head`, `หัว`…** — for up to half your coins |
+| `/dice` | Roll a die. `even`/`odd`/`high`/`low` pays 1:1, calling the exact face pays **×3** |
 | `/ping` · `/about` | Liveness, and the credits |
 
 **The core loop works**: buy rods → fish → earn coins and exp → level up → buy more. On the original's rules,
@@ -97,7 +99,7 @@ you stuck in it. The menu is public and anyone may click it; a click that is not
 "this isn't yours", which is what the original's reaction handler did minus the reaction it had to remove
 afterwards. The whole navigation state lives in the button ids, so **there is no session state to strand**.
 
-### Built: three games
+### Built: five games
 
 **Guess the number.** Bet 10–1000, **seven attempts shared by the whole channel**, five minutes. Solve it on
 the first try for **×5** the bet, within three for **×2**, within five for **×1.5**, on the sixth for **×0.5**,
@@ -132,11 +134,36 @@ A cat is no use against a knife, because that is what the original says. Succeed
 their coins; fail and post a third of yours as bail. The tool is consumed either way, and there is a
 ten-minute cooldown — the original had none, which made it grief-spam.
 
+**Coin flip.** Call a side for at least 3 coins and at most **half** your money — and half is also the default,
+so the default and the ceiling are the same number. A win pays the bet, a loss costs it, with no rake. The
+original's three limits agree with each other rather than being magic numbers: a bet must be ≥3 and ≤ half your
+money, so you need **6** to play at all.
+
+⚖️ **Above 100,000 coins the coin is deliberately weighted against you** — 1-in-3 instead of 1-in-2. That is
+the original's own anti-inflation brake, and the interesting detail is that it is biased against *you*, not
+toward a side: it appends the opposite of whatever *you* just called, rebuilt every flip. Because it re-reads
+your balance each time, one or two max-bet losses drop you back under and the coin is fair again — a soft
+ceiling rather than a punishment. Two things are different here: the bot **tells you the odds are in effect
+before showing the result**, and every affected flip is **logged and marked in the ledger**, so a brake you
+cannot see can no longer be mistaken for bad luck. It never actually fired in the original — the richest player
+on record had 54,217.
+
+**Dice.** Roll one die for 2–1000 coins. `even`/`odd`/`high`/`low` pays 1:1, and calling the **exact face pays
+×3**. High is `> 3`, so 4-5-6, with three faces either way and no push. Both even-money bets are therefore
+exactly fair — the house edge sits entirely on the long shot, where 1-in-6 pays ×3 and a fair price would have
+been ×5. That works out to the same −⅓ expectation as the coin flip's brake, charged on greed instead of on
+wealth. The original's **5-frame reveal animation** is restored.
+
+For both games you **type the call** — `h`, `head`, `หัว`, `ก้อย`, `even`, `สูง`, or a bare `1`–`6` — rather than
+picking from a dropdown, with autocomplete offering hints instead of restricting you. The original's full alias
+table is kept, including *both* byte orderings of `ต่ำ`, which look identical on screen and which he had clearly
+been bitten by once already.
+
 ### Still to port
 
-**Blackjack** dealt with emoji cards, including ace prompting · **coinflip** · **dice** · **Wordle** with a
-daily word · a **minesweeper** generator (the oldest file in the original, from 2020, written before any of it
-was a Discord bot).
+**Blackjack** dealt with emoji cards, including ace prompting · **Wordle** with a daily word · a
+**minesweeper** generator (the oldest file in the original, from 2020, written before any of it was a Discord
+bot).
 
 **Admin tools from inside Discord.** Reload/unload/list cogs without restarting · a restart command that
 counted down, swapped the avatar, left voice cleanly and posted "I'm back!" on its next boot · a data editor ·
@@ -202,8 +229,8 @@ That is what a database fixes, and it is the actual point of this project.
 
 **It is live and being played.** The bot runs in a real server on a real database.
 
-✅ Economy, progression, fishing, market and inventory — all on the original's numbers · ✅ **three games**:
-guess, OX and stealing · ✅ a ledger that reconciles · ✅ **199 tests** against the real database, one command,
+✅ Economy, progression, fishing, market and inventory — all on the original's numbers · ✅ **five games**:
+guess, OX, stealing, coinflip and dice · ✅ a ledger that reconciles · ✅ **236 tests** against the real database, one command,
 real exit code.
 
 **The economy starts from zero.** All 24 original players were imported, then deliberately removed: looking at
@@ -211,7 +238,7 @@ the real numbers side by side, the balances were not worth carrying forward — 
 rewrite had already reset 12 of those players to the starting 200 anyway. Everyone is provisioned fresh on
 their first command. The game content — fish, items, market listings — is seeded from the repo and unaffected.
 
-❌ **Still to port:** blackjack, coinflip, dice, wordle, minesweeper · admin commands (`data` editor, `file`
+❌ **Still to port:** blackjack, wordle, minesweeper · admin commands (`data` editor, `file`
 explorer, `restart`) · i18n · selling items back · prefix commands.
 
 The full ❌ list, and every decision behind the design, lives in [`AI_CarryOn.md`](AI_CarryOn.md).
@@ -223,7 +250,7 @@ npm install
 cp config.example.json config.json     # then fill it in — see below
 npm run db:migrate                     # create the schema (idempotent, safe to re-run)
 npm run db:seed                        # load the fish, items and market (also idempotent)
-npm test                               # 199 checks, real exit code
+npm test                               # 236 checks, real exit code
 npm run bot:register                   # publish slash commands to Discord
 node main.js                           # NOT npm start — see below
 ```
@@ -261,11 +288,13 @@ app/
     guess/                  /guess start | try | rules   (+ typed guesses)
     ox/                     /ox play | rules
     steal/                  /steal, /crime
+    coinflip/               /coinflip                     (typed call + autocomplete)
+    dice/                   /dice                         (typed call + autocomplete)
     guild/                  /server, and join/leave provisioning
     system/                 /ping, /about
   data/                     the only code that reads or writes rows
     economy.js              the cascade, the locking, and the ledger
-    fishing.js  inventory.js  guess.js  ox.js  steal.js
+    fishing.js  inventory.js  guess.js  ox.js  steal.js  coinflip.js  dice.js
     session-store.js        one game per channel, with a per-channel lock
     player.js  guild.js
 

@@ -9,8 +9,8 @@
 
 ## ▶▶ START HERE
 
-**The bot is LIVE in Ote's server, the game loop works, and three games are playable.**
-8 cogs · **11 commands** · 11 tables · **199 tests** · 25 commits on `main`.
+**The bot is LIVE in Ote's server, the game loop works, and FIVE games are playable.**
+10 cogs · **13 commands** · 11 tables · **236 tests** · 27 commits on `main`.
 ⛔ **`mst_player` is EMPTY — the economy was deliberately started over on 2026-08-13.** See DECIDED.
 
 🔑 **RUN IT WITH `run_windows.bat`** (or `node main.js`), **NEVER `npm start`** — see TRAPS #9. npm runs the
@@ -24,7 +24,7 @@ npm install
 cp config.example.json config.json    # token + DB password go here; gitignored
 npm run db:migrate                    # 001-004 — idempotent
 npm run db:seed                       # fish, items, market — idempotent
-npm test                              # 199 checks, real exit code
+npm test                              # 236 checks, real exit code
 npm run bot:register                  # ONLY after changing a SlashCommandBuilder
 run_windows.bat                       # or: node main.js  (NEVER npm start)
 ```
@@ -43,7 +43,9 @@ Ote's instruction. Its token is in `config.json` via `DevTools/maintenance/use-l
 | ✅ **Economy** | Coins, exp, level, crystals. Cascade is pure + unit-tested. Every mutation writes `log_economy` **in the same transaction**. 🔑 Measured: legacy read-modify-write lost **147 of 150** coins under 50 concurrent credits; this loses **0**. |
 | ✅ **Fishing** | Weighted draw (`10 - tier`), 9 fish, 66 total weight. `auto` = 30 rods in **ONE transaction**. **His animation is restored**, with his own `rod_left < 21` throttle. |
 | ✅ **Market** | **Public click-through**: full contents visible, direct buttons per section and item, quantity buttons, modal for a custom amount, **Close** button. Owner-gated — anyone may click, non-owners get a private rejection. |
-| ✅ **Games** | `/guess` — **type a bare number in chat**, his original UX. The Guess button and its modal were REMOVED at his request; `/guess try` survives as the guaranteed path. Cancel = **starter or a config bot admin**. `/ox` — 3×3 **button grid** labelled 1–9, vs bot or duel, give-up settles as a loss. |
+| ✅ **Games (5)** | `/guess` — **type a bare number in chat**, his original UX. The Guess button and its modal were REMOVED at his request; `/guess try` survives as the guaranteed path. Cancel = **starter or a config bot admin**. `/ox` — 3×3 **button grid** labelled 1–9, vs bot or duel, give-up settles as a loss. |
+| ✅ **Coinflip + dice** | `/coinflip` — call a side for 3..half your money (default = half; min 6 to play, a **derived** limit). `/dice` — 2..1000, default 10; even/odd/high/low 1:1, **exact face ×3 as profit** (so 4× in hand); high is `>3`; **his 5-frame animation restored**. ⭐ Both take the call as **TYPED FREE TEXT with his alias table** (`h`/`head`/`หัว`, `e`/`even`/`คู่`, bare `1`-`6`), NOT a dropdown — *"plain chat better ux"*. Autocomplete hints, does not gate. |
+| ⚖️ **The high-roller brake is PORTED** | Above `bot.high_roller_threshold` (default **100000**, `>` so it starts at 100,001) the coin appends **the opposite of the player's own call** — win odds 1/2 → **1/3**, EV **−bet/3**. Biased against the *player*, not a side; re-read every flip so **1-2 max-bet losses switch it off** (a soft ceiling). ⭐ Ote: *"yeah it was my an anti-inflation thing"*. **VISIBLE** (own embed field, before the result) and **LOGGED** at `warning` + ledger `ref` suffix `:highroller`, both at his request. Set the config key to `null` to disable. |
 | ✅ **Stealing** | `/steal` + `/crime`. **The five prop items finally work**, and the mechanic came from his own item text: passkey=steal 35% · knife=rob 50% · gun=rob 70% · cat defends steal −30% · dog defends both −50%. Tool is **consumed** either way; 10-min cooldown on `last_steal_at`; up to a third of theirs, a third of yours as bail. Crime pays **no exp**. |
 | ✅ **Bot admins** | `config.bot.admin_ids` — his legacy `admin_list` ids, moved out of player rows (where `reset_player` could wipe them) into config. `app/bot/permissions.js`, tested to never default open. |
 | ✅ **MESSAGE CONTENT intent is ENABLED** on the legacy application | Verified by a successful login with it requested (`wired 4 event binding(s)`). ⚠️ Requesting it without the portal toggle makes **login itself fail**; `app/bot/index.js` catches that, rebuilds without it, and says which switch to flip. Flag: `discord.message_content_intent`. |
@@ -52,14 +54,14 @@ Ote's instruction. Its token is in `config.json` via `DevTools/maintenance/use-l
 
 ## ❌ What does NOT exist
 
-- ❌ **Blackjack, coinflip, dice, wordle, minesweeper.** `guess`, `ox` and `steal` are what exist.
+- ❌ **Blackjack, wordle, minesweeper.** `guess`, `ox`, `steal`, `coinflip` and `dice` are what exist.
 - ❌ **Admin COMMANDS.** `admin_ids` exists and gates game cancellation, but there is no `/money` adjust,
   no `data` editor, no `file` explorer, no `restart`.
 - ❌ **Selling items back.** Buying only — the legacy had no sell either.
 - ❌ **i18n.** `mst_guild.lang` stored, unused. No `t()` seam.
 - ❌ **Prefix commands.** `mst_guild.prefix` + `bot.default_prefix` stored, read by nothing.
-- ❌ **Autocomplete is now UNUSED.** `dispatch.js` still routes it, but `/buy` was deleted, so nothing
-  declares it. Infrastructure, currently unexercised.
+- ✅ ~~Autocomplete is UNUSED~~ **— no longer true.** `/coinflip` and `/dice` both declare it, because Ote
+  wanted the call **typed, not picked** (*"plain chat better ux"*). It had been dead since `/buy` was deleted.
 - ❌ **No supervisor.** The process exits with a real code and never restarts itself.
 
 ## ⭐ DECIDED — Ote, with his words
@@ -77,6 +79,8 @@ Ote's instruction. Its token is in `config.json` via `DevTools/maintenance/use-l
 | **Keep his guesses visible** | *"dont del my message when i guess number"* then *"i mean you shoukd remove your message, not user's/ right?"* ⇒ the BOT's old board is deleted, the player's message stays. |
 | **Admin-only cancel** | *"make it only admin for now please"* (after a Manage-Messages holder cancelled his game) ⇒ `config.bot.admin_ids`, not Discord permissions. |
 | **OX board 1–9** | *"as we use ui, we can improve this. use 1 2 3 4 5 6 7 8 9 so it look cleaner"* ⇒ his 11–33 row/col labels are gone; you click a square, so the row digit bought nothing. |
+| ⚖️ **KEEP the high-roller brake** | 2026-08-13, asked a third time with the mechanic spelled out: *"It doesn't stop you winning. It makes you win less often" oh, then that fine for me."* then *"yeah it was my an anti-inflation thing, so"*. ⇒ **PORTED**, with his two conditions: *"but visible, yeah"* and *"but make it log when this system fired"*. ⚠️ The earlier plan to leave it out is SUPERSEDED — do not remove it. |
+| ⭐ **Typed calls, not dropdowns** | *"plain chat better ux"* on `/coinflip`'s side and `/dice`'s call ⇒ free-text options with his full alias table, autocomplete as hints only. Third time he has rejected a picker: market dropdown → buttons, guess modal → typed chat, and now these. **Assume typed over picked unless he says otherwise.** |
 | **Tokens not leaked** | *"the token is not leaked. that old code never been anywhere from my old pc"* ⇒ valid but unexposed; resetting is optional hygiene. |
 | ⛔ **START THE ECONOMY OVER** | 2026-08-13, after seeing both legacy saves side by side: *"ok, as i see the real data. i think i would be to start over. no need to port them no more"* ⇒ **all 24 players + their ledgers, items and purchases DELETED**; game content kept. He chose *"wipe players, keep reference data"* over keeping them or a full re-seed. **This closes the legacy-player-import thread for good.** Backup at `DevTools/backups/players_before_reset_20260812_180845.json` (outside the repo — real ids and balances). Ran `DevTools/maintenance/reset-players.mjs --yes`. |
 
@@ -165,7 +169,7 @@ Ote's instruction. Its token is in `config.json` via `DevTools/maintenance/use-l
 
 ## ⏭ NEXT, in order — recommended sequence
 
-1. **coinflip + dice** — both small, and they finish the "quick bet" set.
+1. ✅ **DONE — coinflip + dice.** Kept here because the *rules* are still the reference:
    **Coinflip** ([`CsGamingBot.py:1237-1292`](../Reference/repos/MyBot_Legacy/Gaming%20Bot/CsGamingBot.py)):
    min **6** coins to play · bet **≥3** · bet **≤ HALF** your money (the default bet IS half, so for a rich
    player the default and the ceiling are the same number) · `h`/`head`/`หัว` and `t`/`tail`/`ก้อย`/`หาง` ·
@@ -174,15 +178,18 @@ Ote's instruction. Its token is in `config.json` via `DevTools/maintenance/use-l
    guess even/odd/high/low pays **1:1**, guessing the exact **number pays ×3** · `randing_dice` animates 5
    frames 0.3s apart then reveals. ⚠️ Its exact-number branch pays `int(bet) * 3` as **profit on top of the
    stake**, and high/low is `>3` so 4-5-6 are high — no push on any face.
-   ✅ **RESOLVED — the rigged branch is OUT.** Above **100,001** coins (`> 100000`) his code appends *the
+   ⚖️ **RESOLVED — the brake is IN, at his confirmation that it was anti-inflation.** Above **100,001** coins (`> 100000`) his code appends *the
    opposite of your own guess* to the chance list, cutting your win odds **1/2 → 1/3** (EV **−bet/3**). It is
    biased against *you*, recomputed per flip, not toward a side. It re-reads your balance every invocation,
    so **one or two max-bet losses switch it back off** — a soft ceiling, not a grinder, and the only house
-   edge in an otherwise perfectly fair game. **It never once executed:** richest balance in the final save
-   was **1,401**, and **54,217** in the older CsGamingBot text save — 54% of the threshold at best. Leaving
-   it out changes nothing that ever happened. Keep the idea documented as an anti-inflation lever, because
-   the new economy *could* reach 100k (`AmogusTheFish` pays 100 a catch, uncapped) — and if it is ever
-   wanted it should be a **visible** rule, since a rig players cannot see erodes trust in an economy.
+   edge in an otherwise perfectly fair game. 📌 **It never once executed in the legacy:** richest balance in
+   the final save was **1,401**, and **54,217** in the older CsGamingBot text save — 54% of the threshold at
+   best. So it ships as a working brake for an economy that has not needed it yet, and the new one *could*
+   reach 100k (`AmogusTheFish` pays 100 a catch, uncapped). ⚠️ My earlier recommendation was to leave it out;
+   **he overruled it and he was right** — it is his own anti-inflation design. What survives of that
+   objection is the pair of conditions he attached: it is **visible** and it is **logged**, so it reads as a
+   rule rather than as bad luck. Implementation is in `app/data/coinflip.js` + `app/cogs/coinflip/index.js`,
+   measured over 60,000 flips in `test/unit/coinflip-rules.test.mjs`.
 2. **Blackjack** — the big one. Needs **ephemeral hands** so players cannot see each other's cards, emoji
    cards, and ace prompting. `player_hand`/`playing_bj` were module-level in the legacy, so it hosted one
    game bot-wide; use `ChannelSessions`.

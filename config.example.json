@@ -13,7 +13,8 @@
     "bot": {
         "admin_ids": [],
         "default_lang": "en",
-        "default_prefix": "+"
+        "default_prefix": "+",
+        "high_roller_threshold": 100000
     },
     "logging": {
         "message": {

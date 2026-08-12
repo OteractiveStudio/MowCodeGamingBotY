@@ -403,3 +403,65 @@ The work that came *before* this project is workspace-level and lives in
   number pays ×3**; high is `>3` so 4-5-6, and there is no push on any face. Then **blackjack** (needs
   ephemeral hands so players cannot see each other's cards; `player_hand` was module-level so it hosted one
   game bot-wide), then wordle and minesweeper.
+
+## 2026-08-13 (later) — coinflip and dice, with his anti-inflation brake kept
+
+- ⚖️ **The high-roller brake is PORTED, not dropped.** Asked a third time, with the mechanic spelled out
+  rather than summarised, Ote corrected the premise I had been reasoning from: *"'It doesn't stop you winning.
+  It makes you win less often' oh, then that fine for me."* and then *"yeah it was my an anti-inflation thing,
+  so"*. He had read my earlier framing as *blocking* wins, which is why it had sounded wrong to him; it only
+  ever lowered the odds. **My recommendation to leave it out is superseded and he was right** — it is his own
+  economic design, and the objection I actually had was never about the brake but about it being invisible.
+  Both of his conditions are implemented: *"but visible, yeah"* → the odds get their **own embed field, stated
+  before the result**, plus the note that it eases off by itself; *"but make it log when this system fired"* →
+  one `warning`-level log line per firing (`HIGH-ROLLER BRAKE FIRED — balance … > …, win chance 33%`), and the
+  ledger `ref` carries a `:highroller` suffix so `SELECT … WHERE ref LIKE '%highroller'` answers "is the brake
+  doing anything?" months from now. Threshold is `bot.high_roller_threshold`, default 100000, and an explicit
+  `null` disables it — `undefined` deliberately means "use his default" instead, which is what a missing config
+  key must do.
+- ⭐ **The call is TYPED, not picked** — *"plain chat better ux"*, in response to my having reached for
+  `addChoices`. That is the **third** time he has rejected a picker (market dropdown → direct buttons, guess
+  modal → typed chat, now this), so it is recorded in the carry-on as a standing default rather than three
+  separate corrections. His whole alias table is ported: `h`/`head`/`หัว` and `t`/`tail`/`ก้อย`/`หาง` for the
+  coin, `e`/`even`/`คู่`/`คู`, `o`/`odd`/`คี่`/`คี`, `h`/`hi`/`high`/`สูง`/`ส`, `l`/`lo`/`low`/`ต่ำ`/`ตำ่`/`ต`
+  and a bare `1`-`6` for the dice. ⭐ **`ต่ำ` and `ตำ่` are both in his list and both are kept**: Thai stacks a
+  tone mark and a vowel on the same consonant, the two orderings produce different bytes that look identical on
+  screen, and he had plainly watched a correct-looking guess get rejected once. The test asserts they are
+  unequal strings first, so the reason for the duplication cannot be "tidied away" later.
+  ⭐ **This also resurrects the autocomplete route in `dispatch.js`**, which had been wired and completely
+  unexercised since `/buy` was deleted — it now offers hints without restricting what can be typed.
+- **Both games ported with his numbers.** Coinflip: min **6** to play, bet **≥3** and **≤ half** your money
+  with the default *being* half, win **+bet** / lose **−bet**, no rake. ⭐ Worth recording that his three
+  limits are **coherent, not magic numbers**: a bet must be ≥3 and ≤ half your money, so half must be ≥3, so
+  you need 6 — the min-6 rule is *derived*, and the test says so. Dice: min **2** to play, bet **2–1000** and
+  ≤ your money with default **10**; even/odd/high/low **1:1**, exact face **×3 as profit on top of the stake**
+  (four times the stake in hand), high is `> 3` so 4-5-6, three faces either way and no push. ⭐ That makes
+  dice's house edge **−bet/3 on the long shot** — the same magnitude as the coinflip brake, charged on greed
+  instead of on wealth, while both even-money bets are exactly fair. A fair price for 1-in-6 would have been
+  ×5, so his ×3 was a deliberate-looking edge and is kept; "fixing" it to a true 3× *return* would have been
+  **+2×**, i.e. taking money away from players for tidier arithmetic. **His 5-frame 0.3s reveal animation is
+  restored.**
+- ⚠️ **FIXED — the dice rolled its face twice.** His `dice` computed `answer_high_even = diceit()` once for the
+  win check, and `randing_dice` then called `diceit()` again for every animation frame; only passing `answer`
+  through and re-printing it on the last frame kept the two honest. Here the face is rolled **once**, settled
+  once, and the animation is handed the frames to display — the number that pays is the number the player
+  watched land. ⚠️ **Also fixed:** the money is settled **before** the animation runs, so a crash or a deleted
+  message mid-reveal cannot leave a settled game unpaid or an unsettled game looking paid. The face is already
+  determined, so nothing the player sees changes. ⚠️ **And:** his `guess.isnumeric()` accepted Unicode
+  numerics that `int()` then parsed, so Thai `๓` was a legal guess on a die whose faces read `3`; the parser is
+  ASCII `1-6` only. ⚠️ **And:** both games announced the default bet *before* checking whether the player could
+  afford to play, so a broke player was told "the default bet is 0 BezCoins" and only then that they could not
+  play — affordability is now tested first.
+- 🔑 **The brake is tested by COUNTING 60,000 flips, not by reading the chance list.** A probability asserted by
+  inspecting the code that produces it is not tested at all. Unbraked lands in 0.47–0.53, braked in 0.30–0.37,
+  and a third assertion requires the braked rate to be visibly lower than the fair one, so the test fails if
+  the brake silently stops engaging. **236 checks pass** (up from 199 — 37 new).
+- **Verified end to end against the real database** with a temporary player at 200,000 coins: the brake engaged
+  and reported "1 in 3", a 50,000 loss landed, `explainBalance()` reported `chainIsConsistent: true` and
+  `matchesLiveBalance: true`, and the `:highroller` marker was findable by query. The temporary player was
+  deleted afterwards and `mst_player` is back to 0, so the start-over is intact. 13 commands registered to the
+  dev guild (`859279060999995392`) — guild-scoped, so this did not touch the other 9 servers.
+- Next action: **blackjack**, the big one — needs **ephemeral hands** so players cannot see each other's cards,
+  emoji cards, and ace prompting; `player_hand`/`playing_bj` were module-level in the legacy so it hosted one
+  game bot-wide, and `ChannelSessions` already exists for it. Then wordle (`words.txt` + `daily_word.json` need
+  importing as reference data), minesweeper, and admin commands.
