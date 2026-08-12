@@ -22,6 +22,9 @@
  * supervisor is still open.
  */
 
+import fs from "node:fs";
+import path from "node:path";
+
 import {
     loadConfig,
     configureLogging,
@@ -30,9 +33,39 @@ import {
     log,
     setDB,
     getLogPath,
+    projectRootPath,
 } from "./lib/utility.js";
 import { initDB, closeDB } from "./database/index.js";
 import { startBot, stopBot } from "./app/bot/index.js";
+
+/**
+ * Where the run scripts look to tell OUR bot apart from any other Node process on the machine.
+ *
+ * ⚠️ This exists because six orphaned bots once answered the same server at once, and "is any
+ * node running main.js" is too broad a test on a box with other Node projects — a warning that
+ * fires for someone else's process is one you learn to ignore.
+ */
+const PID_FILE = path.resolve(projectRootPath(), "logs", "bot.pid");
+
+function writePidFile() {
+    try {
+        fs.mkdirSync(path.dirname(PID_FILE), { recursive: true });
+        fs.writeFileSync(PID_FILE, String(process.pid), "utf-8");
+    } catch {
+        // Not being able to record the pid must never stop the bot from running.
+    }
+}
+
+function clearPidFile() {
+    try {
+        // Only remove it if it is still OURS — a newer run may have replaced it.
+        if (fs.existsSync(PID_FILE) && fs.readFileSync(PID_FILE, "utf-8").trim() === String(process.pid)) {
+            fs.unlinkSync(PID_FILE);
+        }
+    } catch {
+        /* nothing useful to do */
+    }
+}
 
 async function boot() {
     const config = loadConfig();
@@ -81,6 +114,8 @@ async function boot() {
             import.meta.url,
         );
     }
+
+    writePidFile();
 
     return { config, db, bot };
 }
@@ -139,6 +174,8 @@ async function shutdown(signal) {
         console.error(`Error during shutdown: ${err.message}`);
         process.exitCode = 1;
     }
+
+    clearPidFile();
 
     const logPath = getLogPath();
     if (logPath) console.log(`Log for this run: ${logPath}`);

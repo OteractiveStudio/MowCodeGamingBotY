@@ -12,7 +12,9 @@
 **The bot is LIVE in Ote's server, the game loop works, and three games are playable.**
 8 cogs · **11 commands** · 11 tables · **199 tests** · 15 commits on `main`.
 
-🔑 **RUN IT WITH `node main.js`, NEVER `npm start`** — see TRAPS #9. Killing npm orphans the bot.
+🔑 **RUN IT WITH `run_windows.bat`** (or `node main.js`), **NEVER `npm start`** — see TRAPS #9. npm runs the
+bot as a child process, so stopping npm orphans it. `main.js` records its own pid in `logs/bot.pid`, which is
+how the run script tells our bot apart from any other Node process on the machine; `stop_windows.bat` reads it.
 
 **Repo:** `github.com/OteractiveStudio/MowCodeGamingBotY` (⚠️ repo name drops the `e` — flagged, harmless).
 
@@ -23,7 +25,7 @@ npm run db:migrate                    # 001-004 — idempotent
 npm run db:seed                       # fish, items, market — idempotent
 npm test                              # 199 checks, real exit code
 npm run bot:register                  # ONLY after changing a SlashCommandBuilder
-node main.js                           # NOT npm start
+run_windows.bat                       # or: node main.js  (NEVER npm start)
 ```
 
 ⚠️ **The bot runs under the LEGACY MowCodeGamingBot application** (`892820973030637608`, 10 guilds), on
