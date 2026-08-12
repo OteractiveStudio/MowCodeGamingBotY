@@ -85,6 +85,10 @@ export function validateCog(cog, expectedName) {
         if (typeof command?.execute !== "function") {
             problems.push(`${expectedName}: command "${name}" has no execute()`);
         }
+        // Optional, but if it is there it has to be callable.
+        if (command?.autocomplete !== undefined && typeof command.autocomplete !== "function") {
+            problems.push(`${expectedName}: command "${name}" has an autocomplete that is not a function`);
+        }
     }
 
     for (const event of cog.events || []) {

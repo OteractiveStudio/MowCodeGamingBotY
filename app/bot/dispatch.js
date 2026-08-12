@@ -13,6 +13,29 @@ import { log } from "../../lib/utility.js";
 
 export function attachCommandDispatch(client, commands, ctx) {
     client.on(Events.InteractionCreate, async (interaction) => {
+        // Autocomplete arrives as its own interaction type and must be answered
+        // within 3 seconds. It is Discord's replacement for the legacy market's
+        // emoji-reaction navigation: the player types, we suggest from the database.
+        if (interaction.isAutocomplete()) {
+            const entry = commands.get(interaction.commandName);
+            if (typeof entry?.command.autocomplete !== "function") return;
+
+            try {
+                await entry.command.autocomplete(interaction, ctx);
+            } catch (err) {
+                await log(
+                    `autocomplete for /${interaction.commandName} threw: ${err.message}`,
+                    "warning",
+                    import.meta.url,
+                );
+                // An empty list is a worse suggestion box, not a broken command.
+                if (!interaction.responded) {
+                    await interaction.respond([]).catch(() => {});
+                }
+            }
+            return;
+        }
+
         if (!interaction.isChatInputCommand()) return;
 
         const entry = commands.get(interaction.commandName);
