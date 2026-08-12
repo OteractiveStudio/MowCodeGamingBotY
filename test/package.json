@@ -1,0 +1,10 @@
+{
+  "name": "mowcodegamingbot-y-test",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "description": "The suite ships inside the project it tests (STANDARDS §5). No dependencies of its own — node's assert and fetch are enough, and the app's own modules are imported directly.",
+  "scripts": {
+    "test": "node pipeline/test-all.mjs"
+  }
+}

@@ -1,0 +1,41 @@
+# .gitignore — MowCodeGamingBoteY
+#
+# Grouped with reasons, per STANDARDS_OTE_WAY_OF_WORKING.md §2: this file doubles
+# as documentation of WHY something is out of the repo.
+#
+# It exists BEFORE the first `npm install` on purpose. That ordering is a rule
+# because the opposite already cost real time elsewhere.
+
+# ── Dependencies ──────────────────────────────────────────────────────────────
+# Never tracked. Once, 140 dependency files were committed under a test folder,
+# and because a `file:` dependency is an npm SYMLINK, one landed as an embedded
+# git repository — which a clone silently cannot fetch.
+node_modules/
+
+# ── Lockfiles ─────────────────────────────────────────────────────────────────
+# Each project regenerates its own via `npm install`.
+package-lock.json
+**/package-lock.json
+
+# ── Secrets / local config ────────────────────────────────────────────────────
+# The Discord bot token and the database password live in config.json.
+# config.example.json is the TRACKED, documented shape with empty secrets.
+# No .env in this project — JSON config is the convention (§3).
+# The legacy Python bot hardcoded a live bot token in source
+# (Gaming Bot/CsGamingBot.py:41). This line is what makes that impossible here.
+config.json
+configs/
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+# Run-scoped log files — the descendant of the legacy debug_msg/YYYYMMDD.txt
+# folder. They contain Discord user ids, message content and query text.
+logs/
+*.log
+
+# ── Editor / OS ───────────────────────────────────────────────────────────────
+# .history/ is exactly what put 13,652 copies of a live token into the legacy
+# tree. Deleting the live file does not remove those.
+.history/
+.vscode/
+.DS_Store
+Thumbs.db

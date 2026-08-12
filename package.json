@@ -1,0 +1,28 @@
+{
+  "name": "mowcodegamingbot-y",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "main.js",
+  "description": "MowCode Gaming Bot, remade — a discord.js bot with Postgres via Sequelize. A rewrite of the 2021-2024 Python/discord.py original, not a translation. No HTTP surface: a dashboard, if wanted, is a separate project.",
+  "scripts": {
+    "start": "node main.js",
+    "dev": "node --watch main.js",
+    "db:migrate": "node database/scripts/migrate.js",
+    "bot:register": "node scripts/register-commands.js",
+    "test": "node test/pipeline/test-all.mjs",
+    "test:unit": "node test/pipeline/test-all.mjs --unit-only"
+  },
+  "keywords": [
+    "discord",
+    "discord.js",
+    "postgres",
+    "sequelize"
+  ],
+  "author": "Ote (OteEnded)",
+  "license": "ISC",
+  "dependencies": {
+    "discord.js": "^14.27.0",
+    "pg": "^8.23.0",
+    "sequelize": "^6.37.8"
+  }
+}

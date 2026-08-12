@@ -1,0 +1,53 @@
+{
+    "app": {
+        "name": "MowCodeGamingBoteY"
+    },
+    "discord": {
+        "enabled": true,
+        "token": "",
+        "application_id": "",
+        "dev_guild_id": ""
+    },
+    "bot": {
+        "default_lang": "en",
+        "default_prefix": "+"
+    },
+    "logging": {
+        "message": {
+            "min_level": "info",
+            "log_directory": "./logs",
+            "log_file_prefix": "message_",
+            "log_file_postfix": "",
+            "log_to_file": true,
+            "log_to_console": true,
+            "log_to_database": true
+        },
+        "sequelize": {
+            "benchmark": true,
+            "log_directory": "./logs",
+            "log_file_prefix": "queries_",
+            "log_file_postfix": "",
+            "log_to_file": true,
+            "log_to_console": false
+        }
+    },
+    "database": {
+        "enabled": true,
+        "sync": {
+            "force": false,
+            "alter": false
+        },
+        "connection": {
+            "username": "",
+            "password": "",
+            "database": "",
+            "schemas": {
+                "parent": "public",
+                "project": "mowcodegamingbot_y"
+            },
+            "host": "127.0.0.1",
+            "port": 54322,
+            "dialect": "postgres"
+        }
+    }
+}
