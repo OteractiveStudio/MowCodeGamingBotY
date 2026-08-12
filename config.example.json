@@ -6,7 +6,8 @@
         "enabled": true,
         "token": "",
         "application_id": "",
-        "dev_guild_id": ""
+        "dev_guild_id": "",
+        "check_command_drift": true
     },
     "bot": {
         "default_lang": "en",

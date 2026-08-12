@@ -9,6 +9,7 @@
 import { createClient } from "./client.js";
 import { loadCogs, attachCogEvents } from "./loader.js";
 import { attachCommandDispatch } from "./dispatch.js";
+import { warnIfCommandsDrifted } from "./registry.js";
 import { log } from "../../lib/utility.js";
 
 export async function startBot({ config, db }) {
@@ -52,6 +53,13 @@ export async function startBot({ config, db }) {
     await log(`wired ${eventCount} event binding(s)`, import.meta.url);
 
     await client.login(token);
+
+    // Editing an execute() needs no re-registration; touching a SlashCommandBuilder
+    // does, and forgetting is silent. One API call turns that into a log line.
+    // It cannot throw and cannot block: see warnIfCommandsDrifted.
+    if (config.discord?.check_command_drift !== false) {
+        await warnIfCommandsDrifted({ config, commands });
+    }
 
     return { client, cogs, commands, ctx };
 }
