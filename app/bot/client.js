@@ -19,9 +19,28 @@
 
 import { Client, GatewayIntentBits, Options } from "discord.js";
 
-export function createClient() {
+/**
+ * ⚠️ MESSAGE CONTENT IS A PRIVILEGED INTENT, and asking for it without enabling it in the
+ * developer portal makes **login itself fail** with `DisallowedIntents` — the bot does not start
+ * at all. So it is opt-in via `discord.message_content_intent`, and `app/bot/index.js` retries
+ * without it if the portal toggle is off, rather than leaving a dead bot.
+ *
+ * Verification is only required above 100 servers; below that the toggle is simply a switch.
+ *
+ * `GuildMessages` comes with it: the intent grants the CONTENT, but the message events themselves
+ * need their own intent, and one without the other is a listener that never fires.
+ */
+export function createClient(config, { withMessageContent = null } = {}) {
+    const wantsMessageContent =
+        withMessageContent ?? config?.discord?.message_content_intent === true;
+
+    const intents = [GatewayIntentBits.Guilds];
+    if (wantsMessageContent) {
+        intents.push(GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent);
+    }
+
     return new Client({
-        intents: [GatewayIntentBits.Guilds],
+        intents,
 
         // Cache only what a command actually reads. The legacy bot kept game
         // state in module-level globals, so two guilds playing at once corrupted

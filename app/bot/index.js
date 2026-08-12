@@ -33,26 +33,55 @@ export async function startBot({ config, db }) {
         import.meta.url,
     );
 
-    const client = createClient();
+    const wantsMessageContent = config.discord?.message_content_intent === true;
+    let client = createClient(config, { withMessageContent: wantsMessageContent });
 
     /**
      * The cog's whole world, injected. Replaces the legacy `b = basic("x")` that
      * every cog constructed for itself at import time.
      */
-    const ctx = { client, db, config, log, cogs, commands };
+    const ctx = { client, db, config, log, cogs, commands, messageContent: wantsMessageContent };
 
-    for (const cog of cogs) {
-        if (typeof cog.setup === "function") {
-            await cog.setup(ctx);
-            await log.debug(`cog "${cog.name}" setup() ran`, import.meta.url);
+    /** Everything that has to be re-done if the client has to be rebuilt. */
+    const wire = async () => {
+        ctx.client = client;
+        for (const cog of cogs) {
+            if (typeof cog.setup === "function") await cog.setup(ctx);
         }
+        const eventCount = attachCogEvents(client, cogs, ctx);
+        attachCommandDispatch(client, commands, ctx);
+        await log(`wired ${eventCount} event binding(s)`, import.meta.url);
+    };
+
+    await wire();
+
+    try {
+        await client.login(token);
+    } catch (err) {
+        // ⚠️ Asking for Message Content without the portal toggle makes LOGIN fail outright, so
+        // the whole bot would be down over one optional feature. Retry without it and say exactly
+        // which switch to flip — a degraded bot that explains itself beats a dead one.
+        const disallowed =
+            wantsMessageContent &&
+            /disallowed intent/i.test(`${err.message} ${err.code ?? ""}`);
+
+        if (!disallowed) throw err;
+
+        await log(
+            "⚠️ Discord refused the MESSAGE CONTENT intent, so typing a guess in chat will not work.\n" +
+            "   Enable it at: Developer Portal → your application → Bot → Privileged Gateway Intents\n" +
+            "   → Message Content Intent → ON. (No verification needed below 100 servers.)\n" +
+            "   Starting WITHOUT it — the Guess button still works.",
+            "warning",
+            import.meta.url,
+        );
+
+        await client.destroy().catch(() => {});
+        client = createClient(config, { withMessageContent: false });
+        ctx.messageContent = false;
+        await wire();
+        await client.login(token);
     }
-
-    const eventCount = attachCogEvents(client, cogs, ctx);
-    attachCommandDispatch(client, commands, ctx);
-    await log(`wired ${eventCount} event binding(s)`, import.meta.url);
-
-    await client.login(token);
 
     // Editing an execute() needs no re-registration; touching a SlashCommandBuilder
     // does, and forgetting is silent. One API call turns that into a log line.

@@ -17,6 +17,7 @@
 
 import { respond } from "../../bot/respond.js";
 import {
+    Events,
     SlashCommandBuilder,
     EmbedBuilder,
     ActionRowBuilder,
@@ -113,7 +114,43 @@ export default {
         },
     ],
 
-    events: [],
+    events: [
+        {
+            /**
+             * ⭐ TYPING A BARE NUMBER TO GUESS — his original UX, restored.
+             *
+             * Ote: *"can you make it the old style where user type in chat to guess? it better ux
+             * then out in a form every time?"* He is right: a modal per guess is friction his
+             * version did not have.
+             *
+             * ⚠️ THIS IS THE HANDLER HIS OWN CODE GOT MOST WRONG, so it is written against that.
+             * `fishing_cog.on_message` called `b.g_trans(message.content, 'en')` — a NETWORK
+             * TRANSLATION REQUEST — on **every message in every server**, just to test whether it
+             * started with "fish". Several cogs each had their own `on_message` doing similar work.
+             *
+             * The rule that came out of it: **command detection must never depend on a network
+             * round-trip.** So the order below is deliberate and every early return is free:
+             *   1. is it a bot? (in-memory)
+             *   2. is there a game in THIS channel? (a Map lookup)
+             *   3. is the whole message just digits? (a regex on a short string)
+             * Only then does anything touch the database. A channel with no game costs one Map
+             * lookup per message, which is what makes this safe to leave on.
+             */
+            name: Events.MessageCreate,
+            async handle(message, ctx) {
+                if (message.author?.bot) return;
+                if (!sessions.has(message.channelId)) return;
+
+                const text = message.content?.trim();
+                // Bare digits only. "42" is a guess; "42 maybe" and "haha" are conversation, and
+                // players must be able to talk in a channel that has a game running.
+                if (!text || !/^\d{1,3}$/.test(text)) return;
+
+                const value = Number(text);
+                await handleTypedGuess(message, ctx, value);
+            },
+        },
+    ],
 
     /** Buttons and the modal, routed here by their `guess:` customId prefix. */
     async handleComponent(interaction, ctx) {
@@ -252,7 +289,7 @@ async function startGame(interaction, ctx) {
     // The legacy used `await asyncio.sleep(300)` inline, which held the command coroutine
     // open for five minutes. A timer lets the handler finish and still expire the game.
     game.timer = setTimeout(() => {
-        void finishGame(interaction, ctx, OUTCOME.TIMEOUT).catch(() => {});
+        void finishGame(interaction.channel, ctx, OUTCOME.TIMEOUT).catch(() => {});
     }, GUESS_RULES.LIFETIME_MS);
 
     await ctx.log(
@@ -334,7 +371,7 @@ async function submitGuess(interaction, ctx, value) {
             flags: MessageFlags.Ephemeral,
         });
         await finishGame(
-            interaction,
+            interaction.channel,
             ctx,
             solved ? OUTCOME.CORRECT : OUTCOME.EXHAUSTED,
             solved ? interaction.user.id : null,
@@ -346,7 +383,7 @@ async function submitGuess(interaction, ctx, value) {
         content: `\`${value}\` is **${comparison}** than the target. ${game.attempts}/${GUESS_RULES.MAX_ATTEMPTS} used.`,
         flags: MessageFlags.Ephemeral,
     });
-    await updateBoard(interaction, game);
+    await updateBoard(interaction.channel, game);
 }
 
 async function cancelGame(interaction, ctx) {
@@ -377,7 +414,7 @@ async function cancelGame(interaction, ctx) {
     });
 
     await finishGame(
-        interaction,
+        interaction.channel,
         ctx,
         isStarter ? OUTCOME.CANCELLED_BY_STARTER : OUTCOME.CANCELLED_BY_MODERATOR,
     );
@@ -415,9 +452,73 @@ async function showRules(interaction) {
 
 // ── Finishing ────────────────────────────────────────────────────────────────
 
-async function updateBoard(interaction, game, options) {
+/**
+ * A guess typed straight into the channel.
+ *
+ * ⭐ Reproduces two things his version did that the button flow lost:
+ *   · the guesser's message is DELETED, so the channel stays readable (his `ctx.message.delete()`)
+ *   · the board is deleted and REPOSTED, so it stays at the bottom of the conversation instead of
+ *     scrolling away above the guesses (his `msg.delete()` then `ctx.send(embed=...)`)
+ *
+ * Both are best-effort: without Manage Messages the delete fails, and that must not cost anyone
+ * their guess.
+ */
+async function handleTypedGuess(message, ctx, value) {
+    const channelId = message.channelId;
+
+    const result = await sessions.withLock(channelId, async () => {
+        const game = sessions.get(channelId);
+        if (!game) return { gone: true };
+
+        const problem = validateGuess(game, message.author.id, value);
+        if (problem) return { problem };
+
+        await ensurePlayer(ctx.db, message.author);
+        return { recorded: sessions.record(channelId, message.author.id, value) };
+    });
+
+    if (result.gone) return;
+
+    if (result.problem) {
+        // A refusal is a short-lived reply rather than an edit to the board: it belongs to the
+        // person who typed, not to the game.
+        const extra = result.problem.code === "ALREADY_GUESSED" ? ` (by <@${result.problem.by}>)` : "";
+        const notice = await message
+            .reply({ content: `**${result.problem.message}**${extra}.` })
+            .catch(() => null);
+        // Tidy up after 15 seconds, like his `delete_after=20`.
+        if (notice) setTimeout(() => void notice.delete().catch(() => {}), 15_000);
+        return;
+    }
+
+    await message.delete().catch(() => {});
+
+    const { game, solved, exhausted } = result.recorded;
+
+    if (solved || exhausted) {
+        await finishGame(message.channel, ctx, solved ? OUTCOME.CORRECT : OUTCOME.EXHAUSTED,
+            solved ? message.author.id : null);
+        return;
+    }
+
+    await repostBoard(message.channel, game);
+}
+
+/** Delete the board and post it again, so it follows the conversation down. */
+async function repostBoard(channel, game) {
+    const previousId = game.messageId;
     try {
-        await interaction.channel.messages.edit(game.messageId, buildBoard(game, options));
+        const posted = await channel.send(buildBoard(game));
+        game.messageId = posted.id;
+        if (previousId) await channel.messages.delete(previousId).catch(() => {});
+    } catch {
+        // If posting failed, keep pointing at the old board rather than losing it entirely.
+    }
+}
+
+async function updateBoard(channel, game, options) {
+    try {
+        await channel.messages.edit(game.messageId, buildBoard(game, options));
     } catch {
         // The board being gone must not stop the game from settling.
     }
@@ -427,8 +528,8 @@ async function updateBoard(interaction, game, options) {
  * End a game and pay everyone, once. Settlement is computed by the pure `settle()` and
  * applied inside ONE transaction, so a game either pays everybody or nobody.
  */
-async function finishGame(interaction, ctx, outcome, winnerId = null) {
-    const channelId = interaction.channelId;
+async function finishGame(channel, ctx, outcome, winnerId = null) {
+    const channelId = channel.id;
 
     const game = await sessions.withLock(channelId, async () => {
         const current = sessions.get(channelId);
@@ -482,7 +583,7 @@ async function finishGame(interaction, ctx, outcome, winnerId = null) {
         lines.push(`· <@${movement.discordId}> ${COIN} \`${sign}${movement.amount}\` — ${movement.note}`);
     }
 
-    await updateBoard(interaction, game, {
+    await updateBoard(channel, game, {
         finished: true,
         resultTitle: "The game is ended",
         resultBody: lines.join("\n").slice(0, 1024),

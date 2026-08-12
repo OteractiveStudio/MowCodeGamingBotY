@@ -7,7 +7,8 @@
         "token": "",
         "application_id": "",
         "dev_guild_id": "",
-        "check_command_drift": true
+        "check_command_drift": true,
+        "message_content_intent": false
     },
     "bot": {
         "default_lang": "en",
