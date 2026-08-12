@@ -5,16 +5,14 @@
  * time it saw them, which was the right instinct (new rows come from config, not
  * from a literal buried in code) and is kept.
  *
- * ❌ NOT built yet: money, exp, level, crystals, inventory, items. Those are the
- * economy slice and they need their own tables — `mst_player_state`,
- * `mst_player_item`, `log_economy` — plus the balance rules from the digest.
- * This cog is identity only, so `mst_player` has a real writer and the atomic
- * upsert is exercised for true.
+ * ⚠️ Coins, exp and levels now exist — they live in the `economy` cog, and
+ * `/whoami` shows them. Items and inventory are still unbuilt.
  */
 
 import { SlashCommandBuilder } from "discord.js";
 
-import { ensurePlayer, countPlayers } from "../../data/player.js";
+import { ensurePlayer, countPlayers, getPlayerWithState } from "../../data/player.js";
+import { expCap, toInt } from "../../data/economy.js";
 
 export default {
     name: "player",
@@ -28,7 +26,9 @@ export default {
 
             async execute(interaction, ctx) {
                 const { row, created } = await ensurePlayer(ctx.db, interaction.user);
+                const player = await getPlayerWithState(ctx.db, interaction.user.id);
                 const total = await countPlayers(ctx.db);
+                const cap = expCap(player.level, player.magical_crystal);
 
                 await interaction.reply(
                     [
@@ -36,9 +36,14 @@ export default {
                             ? `Recorded you for the first time, **${row.username ?? interaction.user.username}**.`
                             : `Already knew you, **${row.username ?? interaction.user.username}**.`,
                         `id \`${row.discord_id}\` · first seen <t:${toUnix(row.first_seen_at)}:R>`,
+                        `🪙 \`${toInt(player.money, "money")}\` · level \`${player.level}\` · ` +
+                        `exp \`${player.exp}/${cap}\`` +
+                        (player.magical_crystal > 0 ? ` · 💎 \`${player.magical_crystal}\`` : ""),
+                        `🎣 \`${player.fishing_rod}\` rod${player.fishing_rod === 1 ? "" : "s"} · ` +
+                        `caught \`${player.fishing_count}\` · inventory size \`${player.inventory_size}\``,
                         `players known: \`${total}\``,
                         "",
-                        "_No wallet yet — economy is the next slice._",
+                        "_Use `/money history` to see where your coins came from._",
                     ].join("\n"),
                 );
             },
