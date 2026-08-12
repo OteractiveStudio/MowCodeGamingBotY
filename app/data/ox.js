@@ -9,18 +9,30 @@
  * both must afford it · vs the bot the bet is capped at **40** · *"winning will get you half
  * of the bet, while losing will make you lose it all."*
  *
- * ⚠️ TWO BUGS FIXED, both found while reading it (Ote: *"fix my old logic bug and go on"*):
+ * ⚠️ CORRECTION, 2026-08-13. An earlier version of this header claimed two payout bugs in his
+ * code — that losing to the bot never charged anything, and that the bot winning would crash on
+ * `OX_player["bot"].id`. **Both claims were wrong**, and they were wrong because I stopped
+ * reading at the first win-check. There are TWO win-checks in `OX_out`, one after each mover:
+ * the first handles a human win (`bet // 2` vs the bot, the full bet in a duel), and the second,
+ * after the bot's move, handles the bot winning with an explicit
+ * `money_add(OX_player[0].id, f"-{OX_bet}")` — the human, by index, never the string. So the
+ * announced rule *"winning will get you half of the bet, while losing will make you lose it
+ * all"* was fully implemented, and nothing crashed. The behaviour in `settle()` below matches
+ * his, and always did; only the commentary was false.
  *
- *   1. **Losing to the bot never cost anything.** The announcement promised "losing will make
- *      you lose it all", and no code ever charged it — the bet-settling branch only ran on a
- *      win. See `settle()`.
- *   2. **The bot winning a bet game would CRASH.** `money_add(OX_player[OX_player_turn].id, …)`
- *      ran whoever won, and when that was the bot, `OX_player[turn]` is the literal string
- *      `"bot"` — so `.id` raised AttributeError. It tried to pay coins to the bot.
+ * ⚠️ What IS genuinely off in the original, kept small and honest:
  *
- * ⚠️ And one inconsistency left as-is but reported: the bankruptcy guard tested
- * `money_check(id) < -10` while its own message said *"You have less than -20 BezCoins"*. This
- * uses the established −20 (`BAD_ECON_THRESHOLD`), so one number means one thing everywhere.
+ *   1. **The bankruptcy guard disagrees with its own message**: it tests
+ *      `money_check(id) < -10` while printing *"You have less than -20 BezCoins"*. This uses the
+ *      established −20 (`BAD_ECON_THRESHOLD`) so one number means one thing everywhere.
+ *   2. **A duel's win message is misleading.** It always appends "(half of {bet})", including in
+ *      player-vs-player games where the FULL bet transfers — so a 100-coin duel announces
+ *      *"The 100 BezCoins (half of 100) have been transferred."* The amount was right; the
+ *      sentence was not. Not reproduced.
+ *   3. **No timeout, and global state.** A board could sit unfinished forever, and because
+ *      `OX_board`/`OX_player` were module-level, one abandoned game blocked OX in **every**
+ *      server at once. That is the real defect in this game, and it is what `OxSessions` and the
+ *      expiry timers fix.
  */
 
 import { ChannelSessions } from "./session-store.js";
