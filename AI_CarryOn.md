@@ -4,255 +4,150 @@
 > cross-project state is in `../AI_CarryOn.md`; the legacy digest is
 > `../Reference/docs/ANALYSIS_LEGACY_MYBOT.md`.
 >
-> **Standard this project follows:** `../Reference/docs/STANDARDS_OTE_WAY_OF_WORKING.md` — **in this tree**
-> (docs · git · stack · database · testing · how to work with Ote). §8 was the checklist for the scaffold.
->
-> **Human entry point:** `README.md` — written for a stranger arriving at the repo: what the project is, why
-> it is being rewritten, and how to run it.
+> **Standard this project follows:** `../Reference/docs/STANDARDS_OTE_WAY_OF_WORKING.md` — **in this tree**.
+> **Human entry point:** `README.md`.
 
 ## ▶▶ START HERE
 
-**The bot has been ONLINE in Discord, the data model is proper SQL, and THE CORE GAME LOOP WORKS —
-buy rods → fish → earn coins and exp → level up → buy more. 117 tests pass against the real database.
-The seven games, stealing, and admin tools are not built.**
+**The bot is LIVE in Ote's server and the game loop works.** 8 cogs · 10 commands · 11 tables ·
+**154 tests** · 12 commits on `main`.
 
-⚠️ Four claims in this file have fallen and are corrected rather than deleted: *"Nothing is built"* (fell
-when Ote asked for the scaffold), *"Nothing has ever connected to Discord"* (fell the same evening),
-*"the game is not built"* (economy came first, then fishing and the market), and *"the next real work is
-fishing"* (done).
-
-**Repo: `github.com/OteractiveStudio/MowCodeGamingBotY`, branch `main`.** ⚠️ Note the repo name drops the `e`
-— `MowCodeGamingBotY` there, `MowCodeGamingBoteY` here. Flagged to Ote 2026-08-12; unresolved, harmless.
+**Repo:** `github.com/OteractiveStudio/MowCodeGamingBotY` (⚠️ repo name drops the `e` — flagged, harmless).
 
 ```bash
 npm install
-cp config.example.json config.json       # then fill in the secrets
-npm run db:migrate                       # idempotent
-npm run db:seed                          # fish, items, market — idempotent
-npm test                                 # 117 checks, real exit code
-npm start                                # fails fast without a Discord token — by design
+cp config.example.json config.json    # token + DB password go here; gitignored
+npm run db:migrate                    # 001, 002, 003 — idempotent
+npm run db:seed                       # fish, items, market — idempotent
+npm test                              # 154 checks, real exit code
+npm run bot:register                  # ONLY after changing a SlashCommandBuilder
+npm start
 ```
 
-**The next real work is a game** — `guess` is the smallest one that exercises betting against the economy that
-already exists. Every legacy rule extracted so far is in 📐 below; do not re-read the Python for anything
-listed there.
+⚠️ **The bot runs under the LEGACY MowCodeGamingBot application** (`892820973030637608`, 10 guilds), on
+Ote's instruction. Its token is in `config.json` via `DevTools/maintenance/use-legacy-token.mjs`.
+`dev_guild_id` is `859279060999995392`.
 
-## 📌 STANDING RULES — git and commits (read before committing anything)
-
-Ote is standing up the GitHub repo now, so these are the rules that bite first. They come from
-`../Reference/docs/STANDARDS_OTE_WAY_OF_WORKING.md` §2 and are repeated here because a rule that lives only
-in a reference doc gets broken by the next agent that does not open it.
-
-- ⛔ **NO AI ATTRIBUTION IN COMMITS. No `Co-Authored-By`, no "Generated with", no tool name, no emoji
-  signature.** The commit history is his. ⚠️ This one needs stating explicitly because several coding agents
-  add an AI trailer *by default* — including this one, whose built-in instructions say to append a
-  `Co-Authored-By` line. **That default is wrong here and must be suppressed on every commit.**
-- **Format: `OteEnded[type]: message`** with literal square brackets. Types: `feat` · `fix` · `refactor` ·
-  `docs` · `chore` · `test`.
-- 🔑 **The subject states the OUTCOME, not the action.** *"update auth"* wastes the one line most likely to be
-  read again. Real examples of the shape he uses:
-  - `OteEnded[fix]: root is two owner values, not one - key filters, token limits, and three tests`
-  - `OteEnded[chore]: stop tracking node_modules - 140 dependency files were in the repo`
-- ⛔ **Commit only when he asks.** Never auto-commit after an edit. Re-check `git status` first.
-- **Multi-line messages via `git commit -F <file>`**, never `-m` with a here-string (PowerShell quoting eats it).
-- **Never track** `node_modules/`, `package-lock.json`, `config.json`, or `logs/` — all four are already in
-  `.gitignore`, verified.
-- ⚠️ **`AI_CarryOn.md` and `AI_ProgressTracking.md` ARE tracked** (his call). Which means: **never paste a
-  live credential into them.** Git history is permanent — reference where a secret lives, never its value.
-  That is why the live legacy tokens below are described by *where they are*, never quoted.
-- **First commit:** this project was not copied from the template, so the pristine-template convention does
-  not apply — the first commit is this scaffold.
-
-## What exists — ✅ verified, not assumed
+## What exists — ✅ verified against the real thing
 
 | | |
 |---|---|
-| ✅ **Repo** | `git init` done, `.gitignore`/`.gitattributes` written **before** the first `npm install`. 13 tracked-able entries; `node_modules/`, `config.json`, `logs/` confirmed ignored. **NOTHING IS COMMITTED YET** — Ote is standing up a GitHub repo (2026-08-12). |
-| ✅ **Stack** | JS ESM · discord.js **14.27.0** · pg **8.23.0** · Sequelize **6.37.8** · Node 24.14.0. **No Fastify** — see DECIDED. |
-| ✅ **Database** | Schema **`mowcodegamingbot_y`** in database `discord_app` on `127.0.0.1:54322`, applied **as the app role** `discord_app` (verified: not a superuser, owns the schema and all 4 tables). Tables: `log_message` · `log_migration` · `mst_guild` · `mst_player`. |
-| ✅ **Migration** | `001_core.sql` applied; re-running says *"up to date"*. `log_migration` holds its sha256, so a migration edited after being applied is caught. |
-| ✅ **ONLINE IN DISCORD** | 2026-08-12 22:31 — the bot connected through the real `startBot()` (cog loading, validation, event wiring, dispatch) and appeared online as **MowCodeGamingBot#1501**, id `892820973030637608`, in **10 guilds**, presence *"Listening to /ping"*. Ote confirmed visually. Held 240s, disconnected cleanly, exit 0. ⚠️ It used the **legacy token** — see 🔴 below. |
-| ✅ **Fails fast** | With no token, `npm start` prints one readable STARTUP FAILED block and exits **1**; the stack goes to the log file and `log_message`, not the console. |
-| ✅ **Tests** | `npm test` → **117 passed, exit 0**, ~0.7s. Includes the 50-concurrent-credit race, 20 concurrent casts at one player, two racing purchases against one affordable balance, 60,000 seeded draws matching the weights, model↔table column parity both directions, CHECK constraints actually refusing bad data, and the logger's **off** state. |
-| ✅ **Cogs** | **6 loaded, 10 commands** — `economy` (`/money balance\|give\|history`), `fishing` (`/fishing cast\|auto\|rates`), `market` (`/market browse\|buy`, `/inventory`), `system` (`/ping`, `/about`), `guild` (`/server` + join/leave), `player` (`/whoami`). |
-| ✅ **Fishing** | Weighted draw (`weight = 10 - tier`) on the seeded 9 fish, 66 total weight — `Nothing` 15.15%, `Trash` 13.64%, `AmogusTheFish` 1.52%, all matching the legacy `fish_rate` formula. `fishing auto` burns up to 30 rods **in ONE transaction**: one lock, one UPDATE, one ledger row per catch. ❌ The animation is not ported (20 message edits per command for decoration). |
-| ✅ **Market + inventory** | All the legacy limits, cited in code: 5 bags / 15 rods / 10 items per purchase · carry 15 rods or 10 per item · a **new** item type needs a free slot (topping up does not) · `bag` raises `inventory_size` capped at `int(1.2*(crystals*100+level))` · `fishingrod` bumps the rod counter instead of becoming an item. Buying grants **no exp** — faithful, since the legacy market bypassed `money_add`. One transaction: funds check, payment, ledger row, `txn_purchase` receipt and item effect together or not at all. |
-| ✅ **Autocomplete** | `/market buy` suggests from the database. Replaces the legacy's **emoji-reaction** buy flow, which tracked mid-purchase players in a module-level `market_using` dict — one market session per process, and a crash mid-flow stranded the player in it. `dispatch.js` routes autocomplete; the cog validator checks the handler is callable. |
-| ✅ **The data model is SQL** | `002_game_core.sql` applied: **11 tables total.** `mst_player_state` · `mst_item` · `mst_player_item` (a row per item) · `mst_market_category` + `mst_market_listing` · `mst_fish` · `txn_purchase` · `log_economy`. Column parity verified against all 11. |
-| ✅ **Reference data seeded** | `npm run db:seed` → 9 fish · 8 items · 3 categories · 9 listings, transcribed into `database/seeds/reference_data.js` so **the repo stands alone** and does not read the legacy tree. |
-| ✅ **Economy works, and it is PROVEN atomic** | 🔑 Measured on this schema with 50 concurrent +3 credits to one player: the **legacy shape lost 147 of 150 coins** (200 → 203 — only 1 of 50 credits survived); this data layer lost **0** (200 → 350). The falsification was run *before* trusting the passing test, because an assertion that cannot fail proves nothing. |
-| ✅ **A balance can be explained** | Every money/exp mutation writes one `log_economy` row **in the same transaction**, so the log cannot disagree with the balance. `explainBalance()` rebuilds it and checks the chain; `/money history` surfaces it and says so out loud if it fails to reconcile. |
+| ✅ **Live** | Logged in as `MowCodeGamingBot#1501`, 10 guilds. Commands invoked by Ote for real. |
+| ✅ **Stack** | JS ESM · discord.js **14.27** · pg · Sequelize 6 · Node 24. **No Fastify** (removed). |
+| ✅ **Database** | `discord_app` on `127.0.0.1:54322`, schema **`mowcodegamingbot_y`**, applied as the app role (not a superuser). **11 tables.** |
+| ✅ **Economy** | Coins, exp, level, crystals. Cascade is pure + unit-tested. Every mutation writes `log_economy` **in the same transaction**. 🔑 Measured: legacy read-modify-write lost **147 of 150** coins under 50 concurrent credits; this loses **0**. |
+| ✅ **Fishing** | Weighted draw (`10 - tier`), 9 fish, 66 total weight. `auto` = 30 rods in **ONE transaction**. **His animation is restored**, with his own `rod_left < 21` throttle. |
+| ✅ **Market** | **Public click-through**: full contents visible, direct buttons per section and item, quantity buttons, modal for a custom amount, **Close** button. Owner-gated — anyone may click, non-owners get a private rejection. |
+| ✅ **Games** | `/guess` (bet 10–1000, 7 attempts, ×5/×2/×1.5/×0.5, per-guess cost) and `/ox` (3×3 **button grid**, vs bot or duel). |
+| ✅ **Legacy players imported** | All **24**, keyed by Discord id. `emanresu` leads: 1401 coins, level 31, 397 catches. |
+| ✅ **Drift check** | On boot, compares the published command list to the code and names what differs. Verified live. |
 
-## ❌ What does NOT exist — name it, so nobody assumes
+## ❌ What does NOT exist
 
-- ⚠️ **Mostly fallen:** this used to say *"The game. No economy, fishing, inventory, market or games…"*
-  **Economy, progression, fishing, market and inventory are all built.** What is still missing:
-  - ❌ **Games — none of the seven.** guess · OX · blackjack · coinflip · dice · wordle · minesweeper.
-    `log_economy` already accepts `game_win`/`game_loss`, so a game only needs its rules and one call to
-    `addMoney`. **`guess` is the smallest starting point** (it had betting, so it exercises the economy).
-    ⚠️ Legacy game state was **module-level** (`OX_board`, `player_hand`, `playing_bj`), so the old bot could
-    only host **one game at a time across all servers** — per-session state must be keyed by guild/channel/user
-    or stored, never module-level.
-  - ❌ **Stealing and robbing.** `knife`, `gun`, `passkey` are purchasable and do nothing; the pets exist to
-    defend against them (*"Cat can make noise and prevent you from being stolen"*). `steal_gain`/`steal_loss`
-    reasons are ready. Needs rules.
-  - ❌ **Admin commands.** No `/money` admin adjust, no `data` editor, no `file` explorer, no `restart`.
-    Needs the permission model decided; the legacy `admin_list` ids go in `config.json`, not a table.
-  - ❌ **Selling items back.** Only buying exists. There is no `sell`, and the legacy had none either.
-- ❌ **The bot has no application of its own.** It has been online *once*, borrowing the legacy
-  application's identity. There is still no token in `config.json`, so `npm run bot:register` has never run
-  and **no slash command has ever been invoked by a real user.** The command bodies are unit-tested; the
-  round trip is not.
-- ❌ **No prefix commands.** `mst_guild.prefix` and `config.bot.default_prefix` are stored and read by
-  **nothing**. They exist because the legacy had them; the surface decision is Ote's.
-- ❌ **No i18n.** `mst_guild.lang` is stored and unused. No `t()` seam yet.
-- ❌ **No `/server set`.** Reading settings works; writing needs the permission model decided.
-- ❌ **No HTTP surface** — removed deliberately, see DECIDED.
-- ❌ **No supervisor, no launcher scripts.** The process exits with a real code and never restarts itself.
+- ❌ **Blackjack, coinflip, dice, wordle, minesweeper.** `guess` and `ox` are the only games.
+- ❌ **Stealing/robbing.** `knife`/`gun`/`passkey` are purchasable and do nothing. `steal_gain`/`steal_loss`
+  ledger reasons exist, unused. Pets (`cat`/`dog`) were the defence.
+- ❌ **Admin commands.** No `/money` adjust, no `data` editor, no `file` explorer, no `restart`. The legacy
+  `admin_list` ids (`403536649222356992`, `880012304740126720`) go in `config.json` when they land.
+- ❌ **Selling items back.** Buying only — the legacy had no sell either.
+- ❌ **i18n.** `mst_guild.lang` stored, unused. No `t()` seam.
+- ❌ **Prefix commands.** `mst_guild.prefix` + `bot.default_prefix` stored, read by nothing.
+- ❌ **Autocomplete is now UNUSED.** `dispatch.js` still routes it, but `/buy` was deleted, so nothing
+  declares it. Infrastructure, currently unexercised.
+- ❌ **No supervisor.** The process exits with a real code and never restarts itself.
 
-## ⚠️ The legacy tokens are VALID — but not leaked. Corrected by Ote, 2026-08-12
-
-⚠️ **This section used to be headed "🔴 SECURITY — the legacy tokens are LIVE" and said that "anyone who has
-ever seen that tree" could control both bots.** Ote corrected the premise: *"the token is not leaked. that old
-code never been anywhere from my old pc, so no worry."* He knows where his code has been; that risk assessment
-was mine and it was wrong.
-
-**What is still true, and was verified by testing:** both tokens **authenticate today**, they are **hardcoded
-in source**, and they exist in **13,652 `.history` copies**. **What is NOT true:** that they are exposed. The
-tree has never left his machine.
-
-⇒ So this is *exposed-in-waiting*, not compromised: it only becomes a real problem if that tree is ever
-published, pushed, or copied to a shared machine — which is exactly why the legacy stays **outside** this repo
-and `Reference/repos/MyBot_Legacy/` remains ungitted. Resetting the tokens is now **optional hygiene, not an
-emergency.**
-
-| Bot | Id | Guilds | Token sits in |
-|---|---|---|---|
-| **MowCodeGamingBot** | `892820973030637608` | **10** | `TOKEN_MCGB.txt` (legacy root **and** `BN_bot/data/token/`) |
-| **Sompade** | `862330157157974088` | **4** | **hardcoded in source**, `Gaming Bot/CsGamingBot.py:41` |
-
-⇒ **These are usable right now.** ⭐ Simplest route to a working bot: copy the `TOKEN_MCGB.txt` value into
-`config.json` → the new code runs as **the same MowCodeGamingBot, in the same 10 servers**. No new application,
-no re-invite. (Optionally reset it in the portal first and paste the new one — same effort, cleaner.)
-
-⚠️ **The token is still NOT committed anywhere.** `config.json` is gitignored; during the online test it was
-read from the frozen tree and used in memory with no copy created. That rule does not change just because the
-exposure risk turned out to be lower than recorded: **a token never goes in a tracked file.**
-
-## ⭐ DECIDED — Ote
+## ⭐ DECIDED — Ote, with his words
 
 | | |
 |---|---|
-| **Gaming only, first** | SBSM (music/soundboard) is out of scope. *"Gaming only, first."* |
-| ⚠️ **NO HTTP surface** | **Supersedes** the earlier *"also yes, Fastify beside it, minimal."* Ote, 2026-08-12: *"we dont need a http now right?, let's forcus on discord js should we?"* and *"the fstidy mention in the innitial carry on should be a seperate project from MowCodeGamingBoteY right?"* ⇒ `app/http/` and its check file were **deleted**, `fastify` uninstalled, `app.port` and `logging.fastify` removed from both config files. A dashboard/API becomes **its own sibling project** reading this same schema — which is also the more extractable option. |
-| **Database** | *"the db is discord_app, user discord_app, pass discord_app, app schema; mowcodegamingbot_y"* — its own database, superseding the earlier `mowcode_gaming`-in-the-shared-database proposal. |
-| **Init it** | *"can you init discord js project at MowCodeGamingBoteY for me?"* — built without the RFC the plan had sequenced first. |
-| **Continue the port** | *"you can continue the porting fomr dis py to js. the old db that jsut a simple json will need to be redesign to be proper sql so."* ⇒ the JSON model becomes proper SQL. **In progress — nothing of it is built yet.** |
-| **Repo** | *"ill start to get a repo up"* — `README.md` was rewritten as a landing page for a stranger. |
+| **Gaming only** | *"Gaming only, first."* SBSM/music/TTS are out of scope. |
+| **No HTTP** | *"we dont need a http now right?"* + *"the fstidy... should be a seperate project"* ⇒ Fastify **removed**. A dashboard is its own project. |
+| **Database** | *"the db is discord_app, user discord_app, pass discord_app, app schema; mowcodegamingbot_y"* |
+| **Market UX** | *"i like the old way of nav"* → *"everyone can see when user call market... also can click reaction, just my program rejected it"* → *"why market now collapse like this?... why it dropdown menu? not a direct button"* → *"where's an option to close the market?"* ⇒ **public, full contents, direct buttons, Close.** |
+| **One command** | *"make it just /market"* + *"no need to /buy"* ⇒ `/market` only; `/buy` deleted. |
+| **Timestamps** | *"all db model timestamps: true please"* ⇒ migration 003, every model `timestamps: true`. |
+| **Improve his code** | *"you can improve the logic of game running, the old code was when im a student"* + *"fix my old logic bug and go on"* + *"that was my event odler code. if there's bug. fix and ship"* |
+| **Tokens not leaked** | *"the token is not leaked. that old code never been anywhere from my old pc"* ⇒ valid but unexposed; resetting is optional hygiene. |
 
-## ⚠️ Decisions I made building it — reversible, flagged not buried
+## ⚠️ TRAPS — do not re-derive these
 
-1. **Slash commands only, and therefore NO privileged intents** (`Guilds` alone). Message Content has been
-   privileged since 2022, so the legacy's whole `on_message` layer would receive **empty content** without
-   portal approval — the worst failure shape there is. ⇒ If prefix commands return, `MessageContent` is added
-   in `app/bot/client.js` and nowhere else. **Still Ote's call.**
-2. **A cog = a directory exporting commands AND events together**, not the community's `commands/`+`events/`
-   split by kind. Keeps a feature whole.
-3. **`ctx` is injected into cogs** rather than each building its own data layer as `b = basic("fishing_cog")`
-   did. This is what makes a cog testable with no Discord and no database.
-4. **No `is_admin` column on `mst_player`.** The legacy read admin identity from player rows that
-   `reset_player` could wipe. It belongs in `config.json`, which is a security boundary. ⚠️ The legacy
-   `admin_list` held two real ids — they go in config when admin commands arrive.
-5. **`mst_guild` rows are marked `left_at`, never deleted** — a kicked-then-reinvited guild keeps its settings.
-6. **`log_migration` is runner-owned**, not declared in a migration (a migration cannot record itself into a
-   table that does not exist yet).
-7. **`{{schema}}` placeholder in SQL**, substituted from config and validated as a plain identifier first, so
-   no script hardcodes a schema name and config cannot become an injection vector.
+1. 🔑 **Discord gives 3 SECONDS to acknowledge an interaction.** `/market` and `/ox` died with
+   `DiscordAPIError[10062]: Unknown interaction` because they read Postgres before replying.
+   ⇒ **`dispatch.js` defers EVERY chat-input command**; cogs answer via `respond()` from
+   `app/bot/respond.js`. **Never call `deferReply()` in a cog** — that is a second defer and throws.
+   ⇒ **Components are NOT deferred**: `showModal()` cannot follow a defer.
+   ⇒ `editReply` cannot set ephemeral; declare `defer: "ephemeral"` on the command instead.
+2. **Re-register only when a `SlashCommandBuilder` changes**, not when `execute()` changes. The boot-time
+   drift check names what drifted if you forget.
+3. **A command cannot have both a bare form and subcommands.** That is why `/market browse` became
+   `/market` and `/buy` had to be top-level (then deleted).
+4. **`if (!port)` rejects port 0.** A truthiness check on a legal zero. Test failed pre-fix, passed post-fix.
+5. **The session lock map grew forever** because cleanup compared against the inner promise, not the chained
+   one. Now in `app/data/session-store.js`, one copy, shared by guess and ox.
+6. **`setDMPermission` is deprecated** → `setContexts(InteractionContextType.Guild)`.
+7. **`Events.ClientReady === "clientReady"`**; the bare string `"ready"` is deprecated.
+8. **BIGINT comes back from pg as a STRING.** `toInt()` throws rather than doing wrong arithmetic on money.
+9. ⚠️ **I claimed two OX payout bugs that DO NOT EXIST** — I stopped reading at the first win-check. `OX_out`
+   has TWO, one per mover; the bot's win is handled separately and charges the human by index. His code was
+   right. Corrected in `1a82080` and in `app/data/ox.js`'s header.
 
-## ⚠️ Traps found while building — do not re-derive
+## 📐 Legacy rules already extracted — do not re-read the Python
 
-- **`if (!port)` rejected port `0`.** Moot now that HTTP is gone, but the lesson stands: a truthiness guard
-  silently refuses a legal zero. The test failed against the old code first, then passed — the only order
-  that proves anything.
-- **`log()` printing to console duplicated a startup failure**, once as a raw stack and once as the pretty
-  block. `main.js` silences console for that single write; the stack still reaches the file and `log_message`.
-- **`setDMPermission` is deprecated** in discord.js 14.27 — use `setContexts(InteractionContextType.Guild)`.
-- **`Events.ClientReady === "clientReady"`** in 14.27, and the bare string `"ready"` is deprecated (it will
-  only emit as `clientReady` in v15). Use the `Events` constants, never the literal.
-- **An empty string is "missing", not "malformed".** A test asserted the wrong error for
-  `schemas.project: ""` — the code was right and the test was wrong.
+- **Provisioning**: money **200** · rods **10** · inventory_size **1** · exp 0 · level 1 · crystals 0.
+- **`money_add(n)` also adds `n` exp.** Earning grants exp; **spending does not** (the market bypassed
+  `money_add`). Transfers grant none either (would be an infinite exp machine).
+- **exp cap** = `level*10 + crystal*2`; at cap → level +1, remainder carries, **cascades**. Level **100** →
+  +1 crystal, level −100. Level settles **0–99**. exp clamps at 0.
+- ⚠️ **Level-0 zero-cap quirk REPRODUCED**: at level 0 with no crystals the cap is 0, so even a zero gain
+  levels you to 1. Asserted in a test, not "fixed".
+- **Money may go NEGATIVE**; below **−20** is bad econ.
+- **Fishing**: weight `10 - tier` (lower = commoner), rod −1 per cast, catch auto-sold, `auto` cap **30**.
+- **Market**: per purchase 5 bags / 15 rods / 10 else · carry 15 rods / 10 per item · a NEW item type needs
+  a free slot, topping up does not · `bag` raises `inventory_size` up to `int(1.2*(crystals*100+level))` ·
+  `fishingrod` bumps the rod counter instead of becoming an item.
+- ⚠️ **He contradicts himself on rods**: market caps at **15**, `fishing auto` burns up to **30**. Both kept.
+- **Guess**: bet 10–1000 (default 10) · 7 shared attempts · target 1–100 · 5 min · ×5 / ×2 / ×1.5 / ×0.5 /
+  nothing · losers pay `round(guesses × bet / 7)`.
+- **OX**: duel bet ≤1000 (both must afford), vs bot ≤40 · vs bot **win half, lose all** · duel winner takes
+  the full bet · draw pays nobody · **the bot plays at RANDOM on purpose** (the weak bot is the balance).
+- ⚠️ **OX bankruptcy guard** tested `< -10` while its message said `-20`. We use −20.
 
-## 📐 Legacy game rules, already read out of the Python — do not re-derive
+## ⚠️ Divergences from the legacy — game balance, Ote's to reverse
 
-From `BN_bot/MCGB_BasicClass.py`, `cogs/fishing_cog.py`, `settings.json` and the data files:
-
-- **Provisioning** (`settings.json.default_inventory` + `add_player`): money **200** · fishing_rod **10** ·
-  inventory_size **1** · items **{}** · exp **0** · level **1** · magical_crystal **0** · fishing **0**.
-- **`money_add(n)` also adds `n` exp.** Money and exp gain are the same number.
-- **exp cap** = `level * 10 + magical_crystal * 2`. On reaching it: level +1, exp −= cap, and it **cascades**
-  (the legacy recursed, so several levels can fall at once). exp is clamped at 0.
-- **level ≥ 100** → +1 magical_crystal, level −= 100. So level is always 0–99 in a settled state.
-- **Money may go NEGATIVE** — `is_bad_econ` is true below **−20**. Any `money >= 0` constraint would be wrong.
-- **Inventory limit**: `len(items) + 1 > inventory_size` means full. ⚠️ **Correction to an earlier note in
-  this file**, which said the `1.2 * (crystals*100 + level)` formula was "from the v1 monolith, not this
-  lineage" — that was wrong. It **is** in `MCGB_BasicClass.get_max_inv_size`, and it is the **ceiling** a `bag`
-  purchase may raise `inventory_size` to, not the size itself. The size is stored; the ceiling is computed. At
-  level 1 with no crystals it is `int(1.2) = 1`, exactly the provisioned size.
-- **Market limits** (`market_cog`): per purchase 5 bags / 15 rods / 10 anything else · carry 15 rods or 10 per
-  item type · `fishingrod` increments the rod counter, `bag` increments `inventory_size`, neither is stored as
-  an item · a **new** item type needs a free slot, topping up a held one does not · **buying grants no exp**,
-  because the market wrote `money -= price` directly and bypassed `money_add`.
-- ⚠️ **THE LEGACY CONTRADICTS ITSELF ON RODS:** `market_cog` caps a player at **15** rods, while
-  `fishing_cog`'s auto mode is written to burn up to **30**. Both are his, in different files, and they cannot
-  both be reachable through the market alone. Both are kept as-is — which one is wrong is Ote's call.
-- **Fishing draw is weighted by tier: weight = `10 - tier`.** Lower tier is *more* common. Rate for a tier is
-  `(10 - tier) / Σ(10 - tier) * 100`. `Nothing` and `Trash` are tier **0**, so they are the most likely draws.
-- **A catch**: rod −1, then `money_add(fish.price)` (so exp too), and `stats.fishing` counts catches.
-- **`fishing auto`** uses every rod the player has, **capped at 30**.
-- **Fish** (`fish.json`, 9 rows): name · file_name · type (`creature` / `not_creature`) · price · tier ·
-  img_file. Prices seen: 8–25. Fish are reconciled against the actual picture files, both directions.
-- **Market** (`market.json`) is **categories → item_list**: `Quick_menu` ⚡, `Pet` 1️⃣, `Tool` 2️⃣, each item
-  with emoji, price and detail. ⚠️ **`fishingrod` appears in TWO categories** (Quick_menu and Tool) with the
-  same price — so the relational shape needs an item catalogue plus per-category listings, not a category
-  column on the item.
-- **Real player data**: 24 players in `players_inv.json`, keyed by Discord user id — which is why importing
-  them later needs no schema change.
-
-## 🚦 STILL OPEN — Ote's
-
-| | |
-|---|---|
-| 🔑 **its own Discord application** | Create it, put token + application_id in `config.json`, `npm run bot:register`. Until then no user has ever invoked a command. ⛔ **Separately: reset the two live legacy tokens** above. |
-| **command surface** | Slash-only is what is built. Prefix + the `on_message` natural-language layer needs the privileged intent. |
-| **feature scope** | Which of the 40 legacy commands / 13 cogs survive. Needed as the game tables are designed. |
-| **where it runs** | An always-on home and a real supervisor. |
-| **i18n depth** | English-only vs the legacy's 64 languages. |
-| **importing the 24 legacy players** | Still a later data job, still needs no schema change. |
-
-## ⚠️ Divergences from the legacy, deliberate — each one line to reverse
-
-Recorded because they are **game-balance decisions**, which are Ote's, not refactors:
-
-1. **A transfer requires the sender to afford it.** The legacy had no concept of a transfer, and `money_add`
-   would happily push a giver negative. A negative balance should come from a penalty, not generosity.
-   ⇒ It is the `senderMoney < amount` check in `app/data/economy.js`.
-2. **A transfer grants NO exp.** In the legacy every `money_add` granted exp equal to the money, so two
-   players passing the same coins back and forth would have been an **infinite exp machine.**
-   ⇒ It is `expDelta: 0` in `transfer()`.
-3. **Market/category keys were normalised to lowercase** (`Quick_menu` → `quick_menu`), with presentation
-   kept in `display_name`. The legacy's answer to case was to define the same command five times.
-4. **The level-0 zero-cap quirk was NOT fixed** — at level 0 with no crystals the cap is 0, so even a zero
-   gain levels the player to 1. Reproduced and asserted in a test, because changing it changes the game.
+1. **Transfers require the sender to afford it** (his would push a giver negative).
+2. **Transfers grant no exp** (else passing coins back and forth farms exp forever).
+3. **Guess timeout now bills the guessers**, as running out of attempts does. His charged nothing.
+4. **Guess: the target-setter wins** when nobody guesses — his message said so while the code paid the
+   *last guesser*. This is the bug he asked to have fixed.
+5. **OX: giving up settles as a loss** (else quitting is a free escape from a lost position).
+6. **OX games/challenges expire** (5 min / 2 min), paying nobody. His had no timeout, and because his state
+   was global an abandoned board blocked OX in **every** server.
+7. **Market/category keys lowercased**, presentation in `display_name`.
+8. **No bet escrow.** Sessions are in-memory; escrow + a restart would take coins with no game to win them
+   back. Nothing is deducted until a game ends, so a lost session costs nobody anything.
 
 ## ⏭ NEXT, in order
 
-1. 🔴 **Its own Discord application** — Ote's, and it now blocks the only thing left unproven: **no user has
-   ever invoked any of these 10 commands.** The data layer is tested hard against the real database; the
-   Discord round trip is not tested at all. Token + `application_id` into `config.json`, then
-   `npm run bot:register`, then `/fishing auto` in a real server.
-2. **`guess`, as the first game** — it had betting, so it reuses `addMoney` and proves the games can sit on the
-   economy. ⚠️ Keep session state keyed (guild/channel/user), never module-level: that is what limited the
-   legacy to one game at a time across all servers.
-3. **Stealing** — gives `knife`/`gun`/`passkey` and the defensive pets a purpose, and uses the
-   `steal_gain`/`steal_loss` ledger reasons already in the schema.
-4. **The remaining games and the admin tools**, once feature scope is decided.
+1. **Blackjack** — the game that needs **ephemeral hands** so players cannot see each other's cards. The
+   legacy kept `player_hand` module-level, so it hosted one game bot-wide; use `ChannelSessions`.
+2. **Stealing** — gives `knife`/`gun`/`passkey` and the defensive pets a purpose; `steal_gain`/`steal_loss`
+   are already valid ledger reasons.
+3. **coinflip / dice** — both small; coinflip's legacy rules are in `CsGamingBot.py` around line 1240
+   (min 6 coins to play, bet ≥3, bet ≤ half your money, and a rigged branch above 100,000 coins).
+4. **Ote's own legacy row** is NOT imported — `/whoami` provisioned him fresh first. His legacy figures:
+   925 coins, level 23, 131 catches, dog×1. Run
+   `node DevTools/maintenance/import-legacy-players.mjs --yes --overwrite` to take it (overwrites his
+   current test progress).
+5. **The README is behind**: it still lists `/market buy`, says 132 tests, and omits `/guess` and `/ox`.
+
+## 🧰 DevTools (workspace root, outside this repo, ungitted)
+
+| Script | |
+|---|---|
+| `use-legacy-token.mjs` | copies the legacy token file → `config.json`, prints only a fingerprint |
+| `import-legacy-players.mjs` | the 24-player import, dry-run by default |
+| `pg-purge-test-rows.mjs` | removes reserved 9xx… test ids after a killed run, dry-run by default |
+| `pg-clean-temp.mjs` | drops stranded `pg_temp_*` schemas (copied from the `AI_LLMv2` workspace — **fix bugs in both copies**) |
+| `check-legacy-tokens.mjs` | are the old tokens still valid (they are) |
+| `bot-online-smoke.mjs` | bring the bot online for N seconds via the real `startBot()` |
+| `prove-atomicity.mjs` | the 147-of-150-lost measurement |

@@ -236,3 +236,51 @@ The work that came *before* this project is workspace-level and lives in
   it reuses `addMoney` and proves the games sit on the economy. ⚠️ Keep game session state keyed by
   guild/channel/user: legacy game state was module-level (`OX_board`, `player_hand`), so the old bot could only
   host one game at a time across every server. ⛔ Still outstanding: **reset the two live legacy tokens.**
+
+### 2026-08-13 00:20
+
+- Summary: **A long live-testing session with Ote in the loop: OX ported, the market rebuilt to his taste
+  three times over, `timestamps: true` everywhere, and a real interaction-timeout bug found by him and fixed
+  structurally.** Six commits (`d04fd92` … `26433f5`). **(1) `/ox`** ported from the v1 monolith — the v2
+  `ox_cog.py` is a stub replying *"Work in Progress."*, which Ote confirmed: *"damn, i havnt port to bn bot
+  back then."* It is now a **3×3 grid of buttons**; his version printed a text grid and you typed `11`–`33`
+  via `on_message`, which needs the privileged intent now. Accept/Decline buttons replace "type accept", and
+  his four-strikes invalid-input counter has nothing left to count because a button cannot be mistyped. Games
+  and challenges expire (5/2 min) paying nobody, and giving up settles as a loss. The bot still plays **at
+  random**, deliberately — with half-up/all-down odds a competent bot would make betting a pure loss.
+  **(2) The market, per his feedback, three rounds:** flat list → *"i like the old way of nav"* → private
+  browser → *"i mean the old one, everyone can see"* → summarised sections + dropdown → *"why market now
+  collapse like this?... why it dropdown menu? not a direct button"* and *"where's an option to close the
+  market?"*. It is now **public, full contents visible, direct buttons per section and item, and a Close
+  button**, owner-gated so anyone may click and non-owners get a private rejection — his reaction handler's
+  behaviour without the reaction it had to remove. Then *"make it just /market"* + *"no need to /buy"* ⇒
+  `/market` is a bare command and `/buy` was deleted along with `purchase()` and the autocomplete helper.
+  **(3)** `003_timestamps_everywhere.sql` on his *"all db model timestamps: true please"*. **(4)** The
+  session map + promise-chain lock extracted to `app/data/session-store.js`, shared by guess and ox.
+- Files touched: `app/data/ox.js` · `app/cogs/ox/index.js` · `app/data/session-store.js` ·
+  `app/data/guess.js` (extends ChannelSessions) · `app/cogs/market/index.js` (rebuilt views) ·
+  `database/migrations/003_timestamps_everywhere.sql` + four models · `app/bot/respond.js` (new) ·
+  `app/bot/dispatch.js` (auto-defer + component routing) · all eight cogs (`respond()`) ·
+  `test/unit/guess-rules.test.mjs` · `AI_CarryOn.md` (rewritten).
+- Decisions: 🔑 **THE INTERACTION LIMIT IS NOW HANDLED STRUCTURALLY, NOT PER COMMAND.** Ote hit *"Something
+  broke running that"* on `/market`; the log said `DiscordAPIError[10062]: Unknown interaction`. Discord
+  allows **3 seconds** to acknowledge, and `/market` (a three-table join, queried twice) and `/ox`
+  (`ensurePlayer` + a state read) both replied after their database work. Any command touching Postgres
+  before replying has the same fault, so `dispatch.js` now **defers every chat-input command** and cogs answer
+  through `respond()`. Components are deliberately **not** deferred — `showModal()` cannot follow a defer.
+  ⚠️ **A correction was published rather than buried:** the previous commit claimed two OX payout bugs (losing
+  to the bot never charged; the bot winning crashed on `OX_player["bot"].id`). **Both were wrong** — `OX_out`
+  has two win-checks, one per mover, and the bot's win charges the human by index. I had stopped reading at the
+  first one. The shipped behaviour was correct either way; only my commentary was false, and `1a82080` says so
+  because the false claim is already in git history. What is genuinely off in his OX: the bankruptcy guard
+  tests `< -10` while its message says `-20` (we use −20), a duel's win message always appends "(half of
+  {bet})" though the full bet transfers, and there was no timeout while state was global — so one abandoned
+  board blocked OX in every server. **Two mechanical mistakes caught before shipping** during the 57-call
+  `respond()` migration: imports inserted inside multi-line import blocks, and one directory level too many.
+- Next action: **blackjack** — it needs **ephemeral hands** so players cannot see each other's cards, and the
+  legacy kept `player_hand` module-level so it hosted one game bot-wide. Then **stealing** (gives
+  knife/gun/passkey and the defensive pets a purpose; `steal_gain`/`steal_loss` are already valid reasons),
+  then coinflip/dice. ⚠️ **The README is behind** — it lists `/market buy`, says 132 tests, and omits `/guess`
+  and `/ox`. ⏭ Ote's own legacy row is still unimported because `/whoami` provisioned him fresh; his legacy
+  figures are 925 coins / level 23 / 131 catches / dog×1, recoverable with
+  `import-legacy-players.mjs --yes --overwrite`.
