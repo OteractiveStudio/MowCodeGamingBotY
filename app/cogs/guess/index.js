@@ -15,6 +15,7 @@
  * cancels, and a moderator can cancel without anyone paying.
  */
 
+import { respond } from "../../bot/respond.js";
 import {
     SlashCommandBuilder,
     EmbedBuilder,
@@ -107,7 +108,7 @@ export default {
                     return submitGuess(interaction, ctx, interaction.options.getInteger("number"));
                 }
                 if (subcommand === "rules") return showRules(interaction);
-                await interaction.reply(`Unknown subcommand \`${subcommand}\`.`);
+                await respond(interaction, `Unknown subcommand \`${subcommand}\`.`);
             },
         },
     ],
@@ -125,7 +126,7 @@ export default {
             const raw = interaction.fields.getTextInputValue("number").trim();
             const value = Number(raw);
             if (!Number.isInteger(value)) {
-                await interaction.reply({
+                await respond(interaction, {
                     content: `\`${raw}\` is not a whole number.`,
                     flags: MessageFlags.Ephemeral,
                 });
@@ -137,7 +138,7 @@ export default {
             return cancelGame(interaction, ctx);
         }
 
-        await interaction.reply({
+        await respond(interaction, {
             content: "That control isn't one I recognise.",
             flags: MessageFlags.Ephemeral,
         });
@@ -210,7 +211,7 @@ async function startGame(interaction, ctx) {
     const channelId = interaction.channelId;
 
     if (sessions.has(channelId)) {
-        await interaction.reply({
+        await respond(interaction, {
             content:
                 "There is already a game running in this channel. Use the **Guess** button on it, or `/guess try`.",
             flags: MessageFlags.Ephemeral,
@@ -226,7 +227,7 @@ async function startGame(interaction, ctx) {
 
     const problem = validateStart({ bet, target, balance: toInt(state.money, "money") });
     if (problem) {
-        await interaction.reply({ content: `**${problem.message}.**`, flags: MessageFlags.Ephemeral });
+        await respond(interaction, { content: `**${problem.message}.**`, flags: MessageFlags.Ephemeral });
         return;
     }
 
@@ -238,7 +239,7 @@ async function startGame(interaction, ctx) {
         target: target ?? null,
     });
 
-    await interaction.reply(buildBoard(game));
+    await respond(interaction, buildBoard(game));
     const message = await interaction.fetchReply();
     game.messageId = message.id;
 
@@ -257,7 +258,7 @@ async function startGame(interaction, ctx) {
 
 async function openGuessModal(interaction) {
     if (!sessions.has(interaction.channelId)) {
-        await interaction.reply({
+        await respond(interaction, {
             content: "That game is over.",
             flags: MessageFlags.Ephemeral,
         });
@@ -302,7 +303,7 @@ async function submitGuess(interaction, ctx, value) {
     });
 
     if (result.gone) {
-        await interaction.reply({
+        await respond(interaction, {
             content: "There is no game running in this channel.",
             flags: MessageFlags.Ephemeral,
         });
@@ -312,7 +313,7 @@ async function submitGuess(interaction, ctx, value) {
     if (result.problem) {
         const extra =
             result.problem.code === "ALREADY_GUESSED" ? ` (by <@${result.problem.by}>)` : "";
-        await interaction.reply({
+        await respond(interaction, {
             content: `**${result.problem.message}**${extra}.`,
             flags: MessageFlags.Ephemeral,
         });
@@ -322,7 +323,7 @@ async function submitGuess(interaction, ctx, value) {
     const { game, solved, exhausted, comparison } = result.recorded;
 
     if (solved || exhausted) {
-        await interaction.reply({
+        await respond(interaction, {
             content: solved ? "Correct! 🎉" : "That was the last attempt.",
             flags: MessageFlags.Ephemeral,
         });
@@ -335,7 +336,7 @@ async function submitGuess(interaction, ctx, value) {
         return;
     }
 
-    await interaction.reply({
+    await respond(interaction, {
         content: `\`${value}\` is **${comparison}** than the target. ${game.attempts}/${GUESS_RULES.MAX_ATTEMPTS} used.`,
         flags: MessageFlags.Ephemeral,
     });
@@ -347,7 +348,7 @@ async function cancelGame(interaction, ctx) {
     const game = sessions.get(channelId);
 
     if (!game) {
-        await interaction.reply({ content: "That game is over.", flags: MessageFlags.Ephemeral });
+        await respond(interaction, { content: "That game is over.", flags: MessageFlags.Ephemeral });
         return;
     }
 
@@ -357,14 +358,14 @@ async function cancelGame(interaction, ctx) {
     const isModerator = interaction.memberPermissions?.has(PermissionFlagsBits.ManageMessages) ?? false;
 
     if (!isStarter && !isModerator) {
-        await interaction.reply({
+        await respond(interaction, {
             content: "Only the player who started this game can cancel it.",
             flags: MessageFlags.Ephemeral,
         });
         return;
     }
 
-    await interaction.reply({
+    await respond(interaction, {
         content: isStarter ? "Cancelled — you forfeit the bet." : "Cancelled.",
         flags: MessageFlags.Ephemeral,
     });
@@ -403,7 +404,7 @@ async function showRules(interaction) {
             ].join("\n"),
         );
 
-    await interaction.reply({ embeds: [embed] });
+    await respond(interaction, { embeds: [embed] });
 }
 
 // ── Finishing ────────────────────────────────────────────────────────────────

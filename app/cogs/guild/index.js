@@ -11,6 +11,7 @@
  * writing is a decision.
  */
 
+import { respond } from "../../bot/respond.js";
 import { Events, SlashCommandBuilder, InteractionContextType } from "discord.js";
 
 import { log } from "../../../lib/utility.js";
@@ -30,7 +31,7 @@ export default {
 
             async execute(interaction, ctx) {
                 if (!interaction.guildId) {
-                    await interaction.reply("That only means something inside a server.");
+                    await respond(interaction, "That only means something inside a server.");
                     return;
                 }
 
@@ -43,13 +44,13 @@ export default {
                         prefix: ctx.config.bot?.default_prefix,
                         lang: ctx.config.bot?.default_lang,
                     });
-                    await interaction.reply(
+                    await respond(interaction, 
                         `First time I've recorded this server. Language \`${created.lang}\`, joined <t:${toUnix(created.joined_at)}:R>.`,
                     );
                     return;
                 }
 
-                await interaction.reply(
+                await respond(interaction, 
                     [
                         `**${row.name ?? interaction.guild.name}**`,
                         `language: \`${row.lang}\``,

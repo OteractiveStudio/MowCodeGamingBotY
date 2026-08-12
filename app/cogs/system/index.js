@@ -6,6 +6,7 @@
  * works when the database is down.
  */
 
+import { respond } from "../../bot/respond.js";
 import { Events, SlashCommandBuilder, ActivityType } from "discord.js";
 
 import { log } from "../../../lib/utility.js";
@@ -25,7 +26,7 @@ export default {
                 const gateway = Math.round(ctx.client.ws.ping);
                 const uptimeSeconds = Math.floor(process.uptime());
 
-                await interaction.reply(
+                await respond(interaction, 
                     `Pong. round-trip \`${roundTrip}ms\` · gateway \`${gateway}ms\` · up \`${formatUptime(uptimeSeconds)}\``,
                 );
             },
@@ -38,7 +39,7 @@ export default {
             async execute(interaction, ctx) {
                 // Straight from the legacy file headers. A team project, named —
                 // and the digest's instruction was to keep the credits.
-                await interaction.reply(
+                await respond(interaction, 
                     [
                         `**${ctx.config.app.name}** — the MowCode Gaming Bot, remade.`,
                         "",

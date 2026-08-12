@@ -14,6 +14,7 @@
  * come from the 10 every player is provisioned with.
  */
 
+import { respond } from "../../bot/respond.js";
 import { SlashCommandBuilder, EmbedBuilder } from "discord.js";
 
 import { ensurePlayer } from "../../data/player.js";
@@ -64,7 +65,7 @@ export default {
                 if (subcommand === "auto") return castEverything(interaction, ctx);
                 if (subcommand === "rates") return rates(interaction, ctx);
 
-                await interaction.reply(`Unknown subcommand \`${subcommand}\`.`);
+                await respond(interaction, `Unknown subcommand \`${subcommand}\`.`);
             },
         },
     ],
@@ -82,7 +83,7 @@ async function castOnce(interaction, ctx) {
     });
 
     if (result.outOfRods) {
-        await interaction.reply(
+        await respond(interaction, 
             `${interaction.user}, **you have no fishing rods left.** ` +
             `The market would sell you more, but it is not built yet.`,
         );
@@ -128,13 +129,14 @@ async function castOnce(interaction, ctx) {
         });
     }
 
-    await interaction.reply({ embeds: [embed] });
+    await respond(interaction, { embeds: [embed] });
 }
 
 async function castEverything(interaction, ctx) {
     await ensurePlayer(ctx.db, interaction.user);
 
-    await interaction.deferReply();
+    // No deferReply() here: dispatch.js defers every chat-input command before calling it, and
+    // deferring twice throws. That is why the animation can safely take 10+ seconds.
 
     // The batch is computed and committed FIRST, in one transaction. The animation below
     // is a reveal of a result that is already safe on disk — the legacy drew its frames
@@ -236,7 +238,7 @@ async function rates(interaction, ctx) {
     const pool = await getFishPool(ctx.db);
 
     if (pool.length === 0) {
-        await interaction.reply("There is nothing in the sea — the reference data is not seeded.");
+        await respond(interaction, "There is nothing in the sea — the reference data is not seeded.");
         return;
     }
 
@@ -256,5 +258,5 @@ async function rates(interaction, ctx) {
             text: "A fish's chance is (10 - tier) / total. Lower tiers are commoner — which is why you keep catching Nothing.",
         });
 
-    await interaction.reply({ embeds: [embed] });
+    await respond(interaction, { embeds: [embed] });
 }

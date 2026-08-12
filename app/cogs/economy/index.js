@@ -13,6 +13,7 @@
  * (need items — knife, gun, passkey — and a rule set), and fishing.
  */
 
+import { respond } from "../../bot/respond.js";
 import { SlashCommandBuilder } from "discord.js";
 
 import { ensurePlayer, getPlayerWithState } from "../../data/player.js";
@@ -77,7 +78,7 @@ export default {
                 if (subcommand === "give") return give(interaction, ctx);
                 if (subcommand === "history") return history(interaction, ctx);
 
-                await interaction.reply(`Unknown subcommand \`${subcommand}\`.`);
+                await respond(interaction, `Unknown subcommand \`${subcommand}\`.`);
             },
         },
     ],
@@ -111,7 +112,7 @@ async function balance(interaction, ctx) {
         );
     }
 
-    await interaction.reply(lines.join("\n"));
+    await respond(interaction, lines.join("\n"));
 }
 
 async function give(interaction, ctx) {
@@ -119,11 +120,11 @@ async function give(interaction, ctx) {
     const amount = interaction.options.getInteger("amount");
 
     if (recipient.id === interaction.user.id) {
-        await interaction.reply("You cannot give coins to yourself.");
+        await respond(interaction, "You cannot give coins to yourself.");
         return;
     }
     if (recipient.bot) {
-        await interaction.reply("Bots have no use for coins.");
+        await respond(interaction, "Bots have no use for coins.");
         return;
     }
 
@@ -139,14 +140,14 @@ async function give(interaction, ctx) {
             guildId: interaction.guildId,
         });
 
-        await interaction.reply(
+        await respond(interaction, 
             `${interaction.user} gave ${COIN} \`${amount}\` to ${recipient}.\n` +
             `You now have \`${result.sender.money}\`; they have \`${result.recipient.money}\`.`,
         );
     } catch (err) {
         if (err.message.startsWith("insufficient funds")) {
             const player = await getPlayerWithState(ctx.db, interaction.user.id);
-            await interaction.reply(
+            await respond(interaction, 
                 `You only have ${COIN} \`${toInt(player.money, "money")}\` — not enough to give \`${amount}\`.`,
             );
             return;
@@ -160,7 +161,7 @@ async function history(interaction, ctx) {
     const ledger = await explainBalance(ctx.db, interaction.user.id, 10);
 
     if (ledger.total === 0) {
-        await interaction.reply("Nothing has happened to your coins yet.");
+        await respond(interaction, "Nothing has happened to your coins yet.");
         return;
     }
 
@@ -190,5 +191,5 @@ async function history(interaction, ctx) {
         );
     }
 
-    await interaction.reply(lines.join("\n"));
+    await respond(interaction, lines.join("\n"));
 }

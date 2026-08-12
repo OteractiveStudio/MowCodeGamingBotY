@@ -9,6 +9,7 @@
  * `/whoami` shows them. Items and inventory are still unbuilt.
  */
 
+import { respond } from "../../bot/respond.js";
 import { SlashCommandBuilder } from "discord.js";
 
 import { ensurePlayer, countPlayers, getPlayerWithState } from "../../data/player.js";
@@ -30,7 +31,7 @@ export default {
                 const total = await countPlayers(ctx.db);
                 const cap = expCap(player.level, player.magical_crystal);
 
-                await interaction.reply(
+                await respond(interaction, 
                     [
                         created
                             ? `Recorded you for the first time, **${row.username ?? interaction.user.username}**.`

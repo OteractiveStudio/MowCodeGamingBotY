@@ -10,6 +10,7 @@
 import { Events, MessageFlags } from "discord.js";
 
 import { log } from "../../lib/utility.js";
+import { deferFor, respond } from "./respond.js";
 
 export function attachCommandDispatch(client, commands, ctx) {
     client.on(Events.InteractionCreate, async (interaction) => {
@@ -87,6 +88,16 @@ export function attachCommandDispatch(client, commands, ctx) {
         const startedAt = Date.now();
 
         try {
+            // ⚠️ DEFER FIRST. Discord allows 3 seconds to acknowledge an interaction; nearly
+            // every command here reads Postgres before it can answer, and a cold connection pool
+            // was enough to blow that window — `/market` and `/ox` both died with
+            // `DiscordAPIError[10062]: Unknown interaction`. Deferring shows "thinking…" at once
+            // and extends the window to 15 minutes, so no command can trip the limit by adding a
+            // query. Commands answer through respond(), which edits the deferred reply.
+            //
+            // Components are deliberately NOT deferred: showModal() cannot follow a defer.
+            await deferFor(interaction, entry.command.defer);
+
             await entry.command.execute(interaction, ctx);
             await log.debug(
                 `/${interaction.commandName} by ${interaction.user.id} in ${interaction.guildId ?? "DM"} ` +

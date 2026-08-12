@@ -19,6 +19,7 @@
  * a transcript.
  */
 
+import { respond } from "../../bot/respond.js";
 import {
     SlashCommandBuilder,
     EmbedBuilder,
@@ -84,7 +85,7 @@ export default {
                 const subcommand = interaction.options.getSubcommand();
                 if (subcommand === "play") return startGame(interaction, ctx);
                 if (subcommand === "rules") return showRules(interaction);
-                await interaction.reply(`Unknown subcommand \`${subcommand}\`.`);
+                await respond(interaction, `Unknown subcommand \`${subcommand}\`.`);
             },
         },
     ],
@@ -104,7 +105,7 @@ export default {
             return quitGame(interaction, ctx);
         }
 
-        await interaction.reply({
+        await respond(interaction, {
             content: "That control isn't one I recognise.",
             flags: MessageFlags.Ephemeral,
         });
@@ -239,7 +240,7 @@ async function startGame(interaction, ctx) {
 
     if (sessions.has(channelId)) {
         const running = sessions.get(channelId);
-        await interaction.reply({
+        await respond(interaction, {
             content:
                 `There is already an OX game in this channel (${nameOf(running, running.challengerId)}). ` +
                 `Wait for it to finish.`,
@@ -253,14 +254,14 @@ async function startGame(interaction, ctx) {
     const withBot = !opponent || opponent.id === interaction.client.user.id;
 
     if (opponent && opponent.bot && opponent.id !== interaction.client.user.id) {
-        await interaction.reply({
+        await respond(interaction, {
             content: "Other bots do not play OX.",
             flags: MessageFlags.Ephemeral,
         });
         return;
     }
     if (opponent && opponent.id === interaction.user.id) {
-        await interaction.reply({
+        await respond(interaction, {
             content: "You cannot duel yourself.",
             flags: MessageFlags.Ephemeral,
         });
@@ -284,7 +285,7 @@ async function startGame(interaction, ctx) {
     });
 
     if (problem) {
-        await interaction.reply({ content: `**${problem.message}.**`, flags: MessageFlags.Ephemeral });
+        await respond(interaction, { content: `**${problem.message}.**`, flags: MessageFlags.Ephemeral });
         return;
     }
 
@@ -297,7 +298,7 @@ async function startGame(interaction, ctx) {
         withBot,
     });
 
-    await interaction.reply(withBot ? boardView(game) : challengeView(game));
+    await respond(interaction, withBot ? boardView(game) : challengeView(game));
     game.messageId = (await interaction.fetchReply()).id;
 
     game.timer = setTimeout(() => {
@@ -330,7 +331,7 @@ async function showRules(interaction) {
             ].join("\n"),
         );
 
-    await interaction.reply({ embeds: [embed] });
+    await respond(interaction, { embeds: [embed] });
 }
 
 // ── Components ───────────────────────────────────────────────────────────────
@@ -340,14 +341,14 @@ async function answerChallenge(interaction, ctx, accepted) {
     const game = sessions.get(channelId);
 
     if (!game || game.accepted) {
-        await interaction.reply({
+        await respond(interaction, {
             content: "There is no challenge waiting here.",
             flags: MessageFlags.Ephemeral,
         });
         return;
     }
     if (interaction.user.id !== game.opponentId) {
-        await interaction.reply({
+        await respond(interaction, {
             content: `That duel is for <@${game.opponentId}>.`,
             flags: MessageFlags.Ephemeral,
         });
@@ -420,25 +421,25 @@ async function placeMark(interaction, ctx, index) {
     });
 
     if (outcome.gone) {
-        await interaction.reply({ content: "That game is over.", flags: MessageFlags.Ephemeral });
+        await respond(interaction, { content: "That game is over.", flags: MessageFlags.Ephemeral });
         return;
     }
     if (outcome.notYet) {
-        await interaction.reply({
+        await respond(interaction, {
             content: "The duel has not been accepted yet.",
             flags: MessageFlags.Ephemeral,
         });
         return;
     }
     if (outcome.notYourTurn) {
-        await interaction.reply({
+        await respond(interaction, {
             content: `It is ${nameOf(outcome.game, outcome.turnPlayer)}'s turn.`,
             flags: MessageFlags.Ephemeral,
         });
         return;
     }
     if (outcome.taken) {
-        await interaction.reply({
+        await respond(interaction, {
             content: "That square is taken.",
             flags: MessageFlags.Ephemeral,
         });
@@ -533,13 +534,13 @@ async function quitGame(interaction, ctx) {
     const game = sessions.get(channelId);
 
     if (!game) {
-        await interaction.reply({ content: "That game is over.", flags: MessageFlags.Ephemeral });
+        await respond(interaction, { content: "That game is over.", flags: MessageFlags.Ephemeral });
         return;
     }
 
     const players = [game.challengerId, game.opponentId].filter(Boolean);
     if (!players.includes(interaction.user.id)) {
-        await interaction.reply({
+        await respond(interaction, {
             content: "Only the players can end this game.",
             flags: MessageFlags.Ephemeral,
         });

@@ -22,6 +22,7 @@
  * here at all** — nothing to collide over, nothing to clean up on restart.
  */
 
+import { respond } from "../../bot/respond.js";
 import {
     SlashCommandBuilder,
     EmbedBuilder,
@@ -105,7 +106,7 @@ export default {
                     });
                 }
 
-                await interaction.reply({ embeds: [embed] });
+                await respond(interaction, { embeds: [embed] });
             },
         },
     ],
@@ -126,7 +127,7 @@ export default {
         const ownerId = parts[2];
 
         if (ownerId && interaction.user.id !== ownerId) {
-            await interaction.reply({
+            await respond(interaction, {
                 content:
                     `This market belongs to <@${ownerId}>. Run \`/market\` and you get your own — ` +
                     `everyone can watch either way.`,
@@ -209,7 +210,7 @@ export default {
             const quantity = Number(raw);
 
             if (!Number.isInteger(quantity) || quantity < 1) {
-                await interaction.reply({
+                await respond(interaction, {
                     content: `\`${raw}\` is not a number of things you can buy.`,
                     flags: MessageFlags.Ephemeral,
                 });
@@ -221,11 +222,11 @@ export default {
             const result = await purchaseResult(
                 ctx, interaction, ownerId, categoryKey, itemKey, quantity,
             );
-            await interaction.reply({ ...result, flags: MessageFlags.Ephemeral });
+            await respond(interaction, { ...result, flags: MessageFlags.Ephemeral });
             return;
         }
 
-        await interaction.reply({
+        await respond(interaction, {
             content: "That control isn't one I recognise.",
             flags: MessageFlags.Ephemeral,
         });
@@ -238,12 +239,12 @@ async function browse(interaction, ctx) {
     const categories = await getMarket(ctx.db);
 
     if (categories.length === 0) {
-        await interaction.reply("The market is empty — the reference data is not seeded.");
+        await respond(interaction, "The market is empty — the reference data is not seeded.");
         return;
     }
 
     // Public on purpose: the channel sees the menu and sees what gets bought.
-    await interaction.reply(await categoryView(ctx, interaction.user.id));
+    await respond(interaction, await categoryView(ctx, interaction.user.id));
 }
 
 /**
