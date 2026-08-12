@@ -25,6 +25,12 @@ whole-file read-modify-write      →   one atomic statement per mutation
 
 | Command | What it does |
 |---|---|
+| `/fishing cast` | Cast once. Weighted draw, rod consumed, catch auto-sold |
+| `/fishing auto` | Burn every rod you have, up to 30, **in one transaction** |
+| `/fishing rates` | What is in the sea and how likely each one is |
+| `/market browse` | Everything for sale, by category |
+| `/market buy` | Buy something — with autocomplete |
+| `/inventory` | What you are carrying, and your slots |
 | `/money balance` | Your coins, level, exp toward the next level, crystals, rods, catches |
 | `/money give` | Give coins to another player — atomically, both sides logged |
 | `/money history` | **Where your coins came from** — the ledger, and whether it reconciles |
@@ -33,8 +39,8 @@ whole-file read-modify-write      →   one atomic statement per mutation
 | `/ping` | Liveness — round-trip time, gateway latency, uptime |
 | `/about` | What the bot is, and the credits |
 
-**Economy and progression are real**, on the rules below. Everything after them is still the original's
-feature set — **the thing being ported** — and not rebuilt yet.
+**The core loop works**: buy rods → fish → earn coins and exp → level up → buy more. On the original's rules,
+below. Everything after that is still its feature set — **the thing being ported** — and not rebuilt yet.
 
 ### Built: economy and progression
 
@@ -58,25 +64,52 @@ Two deliberate divergences from the original, each one line to reverse: a **tran
 afford it** (a negative balance should come from a penalty, not from generosity), and a **transfer grants no
 exp** (otherwise two players passing the same coins back and forth is an infinite exp machine).
 
+### Built: fishing
+
+Cast a rod and pull a **tier-weighted** random catch. A fish's chance is `(10 − tier) / total`, so a *lower*
+tier is *more* common — which is why the two likeliest results are `Nothing` (15.15%) and `Trash` (13.64%),
+and why `AmogusTheFish` shows up 1.52% of the time and pays 100 coins for it. Nine fish, 66 total weight,
+straight from the original's data. A real catch is auto-sold, which credits coins *and* the same exp.
+
+`/fishing auto` burns every rod you own, capped at 30. In the original that was **120+ sequential whole-file
+rewrites**; here the whole batch is one lock, one write, and one ledger row per catch.
+
+The animation is **not** ported — the original edited one embed per second for up to 20 casts, which is 20
+message edits per command for decoration. `deferReply` gives the same beat for one edit.
+
+### Built: market and inventory
+
+Buy from three categories with autocomplete. Every limit is the original's: **5** bags, **15** rods or **10**
+of anything else per purchase; you can carry **15** rods or **10** of an item type; a *new* item type needs a
+free slot, though topping up something you already hold does not. A 🎒 **Bag** raises your slot count, capped
+at `1.2 × (crystals × 100 + level)` — which at level 1 is exactly 1, the slot every player starts with.
+
+`fishingrod` increments your rod counter rather than becoming a carried item, and `bag` raises your slots;
+neither is stored as inventory. Buying grants **no exp**, which is faithful — the original's market wrote
+`money -= price` directly, bypassing the function that granted exp.
+
+The whole purchase is one transaction: funds check, payment, ledger row, receipt and item effect land together
+or not at all. The original checked funds, mutated a dict, then rewrote the file — so two purchases racing
+could both pass the check and both succeed.
+
+⚠️ **One place the original contradicts itself, kept rather than quietly reconciled:** its market caps you at
+**15** rods, but its `fishing auto` is written to burn up to **30**. Both numbers are his, in different files,
+and they cannot both be reachable through the market alone. Which one is wrong is a balance decision.
+
+Autocomplete replaces the original's **emoji-reaction** buy flow, which tracked mid-purchase players in a
+module-level dict — so the bot could only really host one market session at a time, and a crash mid-flow left
+you stuck in it.
+
 ### Still to port
-
-**Fishing.** Buy rods from the market, cast, and pull a **tier-weighted** random catch — lower tiers are more
-common, and the two most likely results are `Nothing` and `Trash`. A real catch is auto-sold for coins (and
-therefore exp), and the rod is consumed. `fishing auto` spends every rod you own, capped at 30, in one
-animated message. Nine fish in the original, priced 8–25, each defined by an actual image file — the bot
-reconciled its fish list against the pictures on disk, in both directions.
-
-**Inventory and market.** Items are held per player against an inventory-size limit. The market is organised
-into categories — Quick menu ⚡, Pet 1️⃣, Tool 2️⃣ — holding things like a fishing rod (5), a knife, a cat
-(500) and a dog (800), each with an emoji and a description. The original drove the whole buy flow with
-**emoji reactions** rather than typed arguments.
 
 **Games.** Guess-the-number with betting · OX / tic-tac-toe against a player or the bot · Blackjack dealt
 with emoji cards, including ace prompting · coinflip · dice · Wordle with a daily word · a minesweeper
 generator (the oldest file in the original, from 2020, written before any of it was a Discord bot).
 
-**Per-server settings.** Prefix, language, a bound music channel, and a bot-manager role — the original had
-multi-server settings and join-time provisioning from its very first version.
+**Stealing and robbing.** The knife, gun and passkey are for sale and currently do nothing — the original had
+`steal` and `cheat`, and pets existed to defend against them (*"Cat can make noise and prevent you from being
+stolen"*, *"Dog can protect you from being robbed"*). The ledger already has `steal_gain`/`steal_loss` reasons
+waiting.
 
 **Multilingual.** The original passed every user-facing string through translation and supported 64
 languages, with a Thai original kept alongside the English one and a credited translator.
@@ -140,14 +173,15 @@ That is what a database fixes, and it is the actual point of this project.
 
 ## Status — honest version
 
-**Economy works. The rest of the game does not exist yet.**
+**The game loop works. The games do not exist yet.**
 
-✅ Boots · ✅ connects to Discord and comes online · ✅ 11 tables applied and verified · ✅ coins, exp, levels
-and crystals with a reconcilable ledger · ✅ **75 tests passing** against the real database, one command, real
-exit code.
+✅ Boots · ✅ connects to Discord and comes online · ✅ 11 tables applied and verified · ✅ economy, progression,
+fishing, market and inventory, all on the original's numbers · ✅ a ledger that reconciles ·
+✅ **117 tests passing** against the real database, one command, real exit code.
 
-❌ **No fishing, inventory, market or games yet** — `mst_fish`, `mst_item` and the market tables exist and are
-seeded, but nothing spends from them. No prefix commands, no i18n, no supervisor.
+❌ **None of the seven games** (guess, OX, blackjack, coinflip, dice, wordle, minesweeper). No stealing or
+robbing, so the knife, gun and passkey do nothing yet. No admin commands. No prefix commands, no i18n, no
+supervisor. ⚠️ And **no user has ever actually run one of these commands** — see below.
 
 The full ❌ list, and every decision behind the design, lives in [`AI_CarryOn.md`](AI_CarryOn.md).
 
@@ -158,7 +192,7 @@ npm install
 cp config.example.json config.json     # then fill it in — see below
 npm run db:migrate                     # create the schema (idempotent, safe to re-run)
 npm run db:seed                        # load the fish, items and market (also idempotent)
-npm test                               # 75 checks, real exit code
+npm test                               # 117 checks, real exit code
 npm run bot:register                   # publish slash commands to Discord
 npm start                              # or: npm run dev  (node --watch)
 ```

@@ -191,3 +191,48 @@ The work that came *before* this project is workspace-level and lives in
   `addMoney(reason:'fishing_catch')` already exists, so a catch is a few lines behind the seam. Then
   inventory/market buying. 🔴 Still blocking any real end-to-end proof: **the bot has no application of its
   own**, so no user has ever invoked a command. ⛔ And still outstanding: **reset the two live legacy tokens.**
+
+### 2026-08-12 23:22
+
+- Summary: **Fishing and the market are ported, which closes the core game loop: buy rods → fish → earn coins
+  and exp → level up → buy more.** Ote: *"go on go on"*. Two commits pushed. **Fishing** (`app/data/fishing.js`,
+  `app/cogs/fishing/`): the legacy's weighted draw kept exactly — `weight = 10 - tier`, so the nine seeded fish
+  total **66** weight and `Nothing` is 15.15%, `Trash` 13.64%, `AmogusTheFish` 1.52%, all matching the legacy
+  `fish_rate` formula, which is now asserted rather than assumed. 🔑 **`fishing auto` is ONE transaction**: the
+  legacy looped 30 times calling `money_add` (read+write the whole players file) then `fishingrod_add`
+  (read+write it again), with `money_add` calling `exp_add` for a third — **120+ sequential whole-file
+  rewrites**. Here the state row is locked once, all N fish are drawn, ONE UPDATE applies money/exp/level/
+  crystal/rods/catch-count, and N ledger rows are inserted. The exp cascade is still applied **per catch**, so
+  each row's `level_after` is true and the `money_after` chain reads correctly across the batch. **Market +
+  inventory** (`app/data/inventory.js`, `app/cogs/market/`): every legacy limit ported and cited in code — 5
+  bags / 15 rods / 10 items per purchase, carry caps of 15 rods and 10 per item type, a **new** item type needs
+  a free slot while topping up a held one does not, `bag` raises `inventory_size` bounded by
+  `int(1.2*(crystals*100+level))`, and `fishingrod` increments the rod counter instead of becoming a carried
+  item. The whole purchase is one transaction against a locked row. **117 tests pass, exit 0.**
+- Files touched: `app/data/fishing.js` · `app/cogs/fishing/index.js` · `test/unit/fishing-draw.test.mjs` ·
+  `test/checks/fishing.check.mjs` · `app/data/inventory.js` · `app/cogs/market/index.js` ·
+  `test/checks/market.check.mjs` · `app/bot/dispatch.js` (autocomplete routing) · `app/bot/loader.js`
+  (validates an autocomplete handler is callable) · `README.md` · `AI_CarryOn.md`.
+- Decisions: ⚠️ **A LEGACY SELF-CONTRADICTION WAS RECORDED RATHER THAN RECONCILED:** `market_cog` caps a player
+  at **15** fishing rods, but `fishing_cog`'s auto mode is written to burn up to **30**. Both numbers are his,
+  in different files, and they cannot both be reachable through the market alone — so both were kept exactly as
+  they were, and which one is wrong is flagged as his balance decision. **Buying grants no exp, faithfully** —
+  the legacy market wrote `player_inv['money'] -= price * amount` directly, bypassing `money_add` and therefore
+  `exp_add`, so only earning ever granted exp; the port matches, with `expDelta: 0`. ⭐ **Autocomplete replaces
+  the emoji-reaction buy flow.** The legacy tracked mid-purchase players in a module-level `market_using` dict,
+  so the bot could only really host one market session per process and a crash mid-flow stranded the player in
+  it; autocomplete suggests from the database and holds no session state. This required adding autocomplete
+  routing to `dispatch.js` and extending the cog validator. **The fishing animation was NOT ported** — the
+  legacy edited one embed per second for up to 20 casts, which is 20 message edits per command for decoration;
+  `deferReply()` gives the same beat for one edit, and if the animation returns it belongs behind a config flag.
+  ⚠️ **An earlier note in `AI_CarryOn.md` was CORRECTED**: it claimed the `1.2 * (crystals*100 + level)` formula
+  was from the v1 monolith and not this lineage. It is in `MCGB_BasicClass.get_max_inv_size`, and it is the
+  **ceiling** a `bag` purchase may raise `inventory_size` to, not the stored size. **Purchase refusals are
+  typed** (`PurchaseError` with a `code`) so the cog phrases each one from the code rather than matching message
+  text — the legacy built each refusal string inline at the call site, four times over.
+- Next action: 🔴 **Ote creates the bot's own Discord application.** It now blocks the only thing left
+  unproven: **no user has ever invoked any of the 10 commands.** The data layer is tested hard against the real
+  database; the Discord round trip is not tested at all. Then **`guess` as the first game** — it had betting, so
+  it reuses `addMoney` and proves the games sit on the economy. ⚠️ Keep game session state keyed by
+  guild/channel/user: legacy game state was module-level (`OX_board`, `player_hand`), so the old bot could only
+  host one game at a time across every server. ⛔ Still outstanding: **reset the two live legacy tokens.**
