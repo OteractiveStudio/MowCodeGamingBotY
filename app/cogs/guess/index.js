@@ -5,11 +5,14 @@
  * `app/data/guess.js`. This file is only the Discord surface, and that surface is where the
  * platform forced real change:
  *
- * ⚠️ YOU CANNOT TYPE A BARE NUMBER ANY MORE. The legacy read every message in the channel
- * (`on_message` → `int(IM)`), which since 2022 needs the privileged Message Content intent —
- * without it `message.content` arrives EMPTY and the feature silently does nothing. So a
- * **Guess button opening a modal** replaces typing, and `/guess try` exists for anyone who
- * prefers a command.
+ * ⭐ YOU TYPE A BARE NUMBER IN CHAT TO GUESS — his original UX. Ote: *"can you make it the old
+ * style where user type in chat to guess? it better ux then out in a form every time?"* and then
+ * *"dont forget to remove guess button"*, so the button-and-modal version is gone entirely.
+ *
+ * ⚠️ This needs the privileged **Message Content** intent (since 2022). It is enabled on this
+ * application, and `discord.message_content_intent` gates it — without the intent
+ * `message.content` arrives EMPTY and typing would silently do nothing, which is why
+ * `/guess try` survives as the guaranteed path.
  *
  * ⚠️ The ❌ reaction is replaced by a **Cancel button**. Same rule as his: only the starter
  * cancels, and a moderator can cancel without anyone paying.
@@ -23,9 +26,6 @@ import {
     ActionRowBuilder,
     ButtonBuilder,
     ButtonStyle,
-    ModalBuilder,
-    TextInputBuilder,
-    TextInputStyle,
     MessageFlags,
     PermissionFlagsBits,
     InteractionContextType,
@@ -156,21 +156,6 @@ export default {
     async handleComponent(interaction, ctx) {
         const [, action] = String(interaction.customId).split(":");
 
-        if (action === "open" && interaction.isButton()) {
-            return openGuessModal(interaction);
-        }
-        if (action === "submit" && interaction.isModalSubmit()) {
-            const raw = interaction.fields.getTextInputValue("number").trim();
-            const value = Number(raw);
-            if (!Number.isInteger(value)) {
-                await respond(interaction, {
-                    content: `\`${raw}\` is not a whole number.`,
-                    flags: MessageFlags.Ephemeral,
-                });
-                return;
-            }
-            return submitGuess(interaction, ctx, value);
-        }
         if (action === "cancel" && interaction.isButton()) {
             return cancelGame(interaction, ctx);
         }
@@ -225,12 +210,10 @@ function buildBoard(game, { finished = false, resultTitle = null, resultBody = n
     const rows = finished
         ? []
         : [
+              // ⚠️ Ote: "dont forget to remove guess button". You type the number now, so a
+              // button that opens a form to type the same number is a step for nothing. Only
+              // Cancel remains — it replaces his ❌ reaction and has no typed equivalent.
               new ActionRowBuilder().addComponents(
-                  new ButtonBuilder()
-                      .setCustomId("guess:open")
-                      .setLabel("Guess")
-                      .setEmoji("🔢")
-                      .setStyle(ButtonStyle.Primary),
                   new ButtonBuilder()
                       .setCustomId("guess:cancel")
                       .setLabel("Cancel")
@@ -299,32 +282,6 @@ async function startGame(interaction, ctx) {
     );
 }
 
-async function openGuessModal(interaction) {
-    if (!sessions.has(interaction.channelId)) {
-        await respond(interaction, {
-            content: "That game is over.",
-            flags: MessageFlags.Ephemeral,
-        });
-        return;
-    }
-
-    const modal = new ModalBuilder()
-        .setCustomId("guess:submit")
-        .setTitle("Guess the number")
-        .addComponents(
-            new ActionRowBuilder().addComponents(
-                new TextInputBuilder()
-                    .setCustomId("number")
-                    .setLabel(`A number from ${GUESS_RULES.MIN_TARGET} to ${GUESS_RULES.MAX_TARGET}`)
-                    .setStyle(TextInputStyle.Short)
-                    .setMinLength(1)
-                    .setMaxLength(3)
-                    .setRequired(true),
-            ),
-        );
-
-    await interaction.showModal(modal);
-}
 
 async function submitGuess(interaction, ctx, value) {
     const channelId = interaction.channelId;
@@ -491,8 +448,9 @@ async function handleTypedGuess(message, ctx, value) {
         return;
     }
 
-    await message.delete().catch(() => {});
-
+    // ⚠️ Ote, 2026-08-13: *"dont del my message when i guess number."* His original deleted it
+    // (`ctx.message.delete()`) to keep the channel tidy; he would rather see his own guesses. So the
+    // message stays, and the board still reposts underneath so it follows the conversation down.
     const { game, solved, exhausted } = result.recorded;
 
     if (solved || exhausted) {
@@ -501,18 +459,42 @@ async function handleTypedGuess(message, ctx, value) {
         return;
     }
 
-    await repostBoard(message.channel, game);
+    await repostBoard(message.channel, game, ctx);
 }
 
-/** Delete the board and post it again, so it follows the conversation down. */
-async function repostBoard(channel, game) {
+/**
+ * Post a fresh board and remove the previous one, so exactly ONE board exists and it sits at the
+ * bottom of the conversation — his behaviour (`msg.delete()` then `ctx.send(embed=...)`).
+ *
+ * ⚠️ Ote: *"i mean you shoukd remove your message, not user's/ right?"* — yes, and the first
+ * version silently failed to. The delete was wrapped in a bare `.catch(() => {})`, so when it did
+ * not work there was nothing to see: two boards stacked up and the failure left no trace. That is
+ * the legacy's `except: pass` habit sneaking back in. It now logs why.
+ */
+async function repostBoard(channel, game, ctx) {
     const previousId = game.messageId;
+
+    let posted;
     try {
-        const posted = await channel.send(buildBoard(game));
+        posted = await channel.send(buildBoard(game));
         game.messageId = posted.id;
-        if (previousId) await channel.messages.delete(previousId).catch(() => {});
-    } catch {
-        // If posting failed, keep pointing at the old board rather than losing it entirely.
+    } catch (err) {
+        // Keep pointing at the old board rather than losing the game's only visible surface.
+        await ctx?.log?.(`guess: could not post a new board: ${err.message}`, "warning", import.meta.url);
+        return;
+    }
+
+    if (!previousId) return;
+
+    try {
+        await channel.messages.delete(previousId);
+    } catch (err) {
+        // A bot can always delete its OWN messages, so this failing is worth knowing about.
+        await ctx?.log?.(
+            `guess: could not delete the previous board ${previousId}: ${err.message}`,
+            "warning",
+            import.meta.url,
+        );
     }
 }
 
