@@ -38,6 +38,8 @@ whole-file read-modify-write      →   one atomic statement per mutation
 | `/wordle start` · `board` · `rules` | Guess the hidden word — **type guesses in chat**, 4-6 letters, 6 tries |
 | `/admin money` · `player` · `reset` · `fish` · `stats` · `cogs` | Owner tools, behind one gate |
 | `/feedback msg:…` | Tell the maintainers what you think — private, and stored |
+| `/help` · `/rand` · `/trans` | What the bot does · a random number · translate on request |
+| `/tts join` · `say` · `stop` · `leave` | Read a text channel out loud in a voice channel |
 | `/ping` · `/about` | Liveness, and the credits |
 
 **The core loop works**: buy rods → fish → earn coins and exp → level up → buy more. On the original's rules,
@@ -326,7 +328,7 @@ That is what a database fixes, and it is the actual point of this project.
 **It is live and being played.** The bot runs in a real server on a real database.
 
 ✅ Economy, progression, fishing, market and inventory — all on the original's numbers · ✅ **seven games**:
-guess, OX, stealing, coinflip, dice, blackjack and wordle · ✅ a ledger that reconciles · ✅ **318 tests** against the real database, one command,
+guess, OX, stealing, coinflip, dice, blackjack and wordle · ✅ a ledger that reconciles · ✅ **375 tests** against the real database, one command,
 real exit code.
 
 **The economy starts from zero.** All 24 original players were imported, then deliberately removed: looking at
@@ -334,8 +336,8 @@ the real numbers side by side, the balances were not worth carrying forward — 
 rewrite had already reset 12 of those players to the starting 200 anyway. Everyone is provisioned fresh on
 their first command. The game content — fish, items, market listings — is seeded from the repo and unaffected.
 
-❌ **Still to port:** minesweeper · a `restart` command (needs a supervisor) · i18n · selling items back ·
-prefix commands. **Deliberately not porting:** the file explorer — see below.
+❌ **Still to port:** music · minesweeper · Discord voice-channel activities · selling items back.
+**Deliberately not rebuilt:** the file browser, and prefix commands as commands — both explained below.
 
 The full ❌ list, and every decision behind the design, lives in [`AI_CarryOn.md`](AI_CarryOn.md).
 
@@ -346,7 +348,7 @@ npm install
 cp config.example.json config.json     # then fill it in — see below
 npm run db:migrate                     # create the schema (idempotent, safe to re-run)
 npm run db:seed                        # load the fish, items and market (also idempotent)
-npm test                               # 318 checks, real exit code
+npm test                               # 375 checks, real exit code
 npm run bot:register                   # publish slash commands to Discord
 node main.js                           # NOT npm start — see below
 ```
@@ -390,6 +392,8 @@ app/
     wordle/                 /wordle start | board | rules  (+ typed guesses)
     admin/                  /admin money | player | reset | fish | feedback | stats | cogs
     feedback/               /feedback
+    utility/                /help, /rand, /trans           (+ old-prefix redirect)
+    tts/                    /tts join | say | stop | leave
     guild/                  /server, and join/leave provisioning
     system/                 /ping, /about
   data/                     the only code that reads or writes rows

@@ -10,7 +10,7 @@
 ## ▶▶ START HERE
 
 **The bot is LIVE in Ote's server, the game loop works, and SEVEN games are playable.**
-14 cogs · **18 commands** · 13 tables · **318 tests** · 32 commits on `main`.
+16 cogs · **22 commands** · 13 tables · **375 tests** · 35 commits on `main`.
 ⛔ **`mst_player` is EMPTY — the economy was deliberately started over on 2026-08-13.** See DECIDED.
 
 🔑 **RUN IT WITH `run_windows.bat`** (or `node main.js`), **NEVER `npm start`** — see TRAPS #9. npm runs the
@@ -24,7 +24,7 @@ npm install
 cp config.example.json config.json    # token + DB password go here; gitignored
 npm run db:migrate                    # 001-006 — idempotent
 npm run db:seed                       # fish, items, market, 2004 wordle words — idempotent
-npm test                              # 318 checks, real exit code
+npm test                              # 375 checks, real exit code
 npm run bot:register                  # ONLY after changing a SlashCommandBuilder
 run_windows.bat                       # or: node main.js  (NEVER npm start)
 ```
@@ -54,6 +54,12 @@ Ote's instruction. Its token is in `config.json` via `DevTools/maintenance/use-l
 | ⛔ **Legacy players — IMPORTED, THEN DELETED** | **The economy started over on 2026-08-13.** All 24 imported players and their history were removed; see DECIDED. `mst_player` is **empty**. Everyone is provisioned fresh at 200 coins on their next command. **Do not re-import** — `import-legacy-players.mjs` now refuses. |
 | ✅ **Admin tools** | `/admin money · player · reset · fish · stats · cogs`. ⭐ **ONE gate** at the top of `execute()`, not per-branch — his `data` re-tested `is_admin` in every branch and his **`file` command forgot entirely**, so anyone in any of 12 servers could list and download files off the host. 🔑 **`log_economy.actor_id` is finally written** — unused since migration 002 — so an `admin_adjust` names *who* did it. ⚠️ `/admin money` grants **NO exp by default** (his `money_add` always did, so a 10,000 top-up would have handed out ~13 levels); opt in with `grant_exp:true`. Reset is button-confirmed with the target in the customId, so there is **no pending-confirmation state to strand**, and admin is **re-checked on the click** because a customId is client-supplied. |
 | ✅ **Feedback** | `/feedback msg:…` → `log_feedback`, at Ote's request: *"record feedbacks to a pg table, so user adn feedback our new system"*. **Ephemeral** (`defer: "ephemeral"`) because feedback is often *about* other players. Rate-limited **5 per hour**, counted from real rows so a restart does not reset it. 🔑 **NO foreign key to `mst_player` — deliberately.** Every other player table cascades, which would have meant the 2026-08-13 player wipe **deleted all feedback**; a `username_at_time` snapshot keeps a row readable after its author's row is gone. Read it with `/admin feedback [status] [limit]`, which has a **Mark all as read** button (idempotent, scoped to `status='new'` in SQL). |
+| ✅ **i18n — CATALOGUES, not machine translation** | `lib/i18n.js` + `app/i18n/{en,th}.js`, **63 keys each, both 100%**. `/server set language`, `/server show` reports per-language coverage. 🔑 **His mechanism is NOT rebuilt**: `translate_msg_out` machine-translated *every string at send time* — a network call per string in front of the 3-second window, non-deterministic so nothing is testable, and it mangles markdown/mentions/emoji (his own text has a stray Thai word inside an English sentence). Cost: his advertised 64 languages. ⚠️ **COVERAGE IS PARTIAL** — `/help`, `/rand`, `/trans`, `/server`, `/ping`, `/about`, `/feedback`, prefix redirect. **The games are NOT converted** (several hundred strings). `missingKeys()`/`strayKeys()` measure it; a test forbids stray keys. |
+| ✅ **`/help` · `/rand` · `/trans`** | `/help` is **built from the live cog registry**, so it cannot drift the way his hardcoded help had (it advertised wordle when no wordle command existed). `/rand` keeps his credit to **มิกกี้**; ⚠️ FIXED — his refused equal bounds as "invalid format" when `rand 5 5` is a question with one answer. `/trans` keeps the live translation because *asking* for one is worth a round trip — guarded with a timeout, shape checks at every level, no new dependency, and a config switch. |
+| ✅ **Prefix commands — ANSWERED: they still work, but they REDIRECT** | They need the Message Content intent (this bot has it). Not rebuilt, because it would need an Interaction adapter per handler and a modal cannot open from a message at all. Instead `<prefix>fishing` → *"that is `/fishing` now"*, including renamed ones (`inv`, `stats`, `bj`, `cf`, `xo`, `data`, `cheat`, `wordleplus`). **`mst_guild.prefix` is finally read**, and settable. |
+| ✅ **Rotating status + avatar self-check** | His 14-line cycle, at **60s not 7s** — 7s is 12,342 presence updates/day against a ~5-per-20s limit. Clamped to a 15s floor, `null` disables. ⚠️ Avatar compared by Discord's **hash, not bytes** (Discord re-encodes uploads, so his byte compare would have re-uploaded every boot) and attempted **ONCE, never retried** (limit is ~2/hour, and his looped). Off unless `bot.avatar_file` is set. |
+| ✅ **`/admin restart` + a REAL supervisor** | His `os.system("python MCGB_Launcher.py")` **blocked the dying parent on its own replacement**. Now: exit **42** = "start me again", and `run_windows.bat`/`run_linux.sh` are the supervisor loop. `MCGB_SUPERVISED=1` is exported by them and **the command refuses without it** — a restart button that kills the bot for good is worse than none. His countdown, presence change and "I'm back! :D" all kept (notice file, cleared when read). |
+| ✅ **TTS** | `/tts join · say · stop · leave` + reads the bound channel aloud, his shape. Stack needs **no native builds**: `@discordjs/voice` + `@noble/ciphers`, ffmpeg emitting **ogg/opus directly** (no `@discordjs/opus`, no JS PCM re-encode), `ffmpeg-static` bundled. 🔑 **6 defects fixed** — see `app/data/tts.js`. ⚠️ **AUDIBILITY IS UNVERIFIED**: endpoint→mp3→Ogg/Opus→Ready→Idle-driven queue all checked against the real services, but sound coming out needs a human in a channel. The cog logs the voice dependency report on load. |
 | ✅ **Drift check** | On boot, compares the published command list to the code and names what differs. Verified live. |
 
 ## ❌ What does NOT exist
@@ -66,11 +72,15 @@ Ote's instruction. Its token is in `config.json` via `DevTools/maintenance/use-l
   caches by URL and cannot be invalidated, so a "reload" would import nothing and claim success), and
   **`restart`** (no supervisor exists yet).
 - ❌ **Selling items back.** Buying only — the legacy had no sell either.
-- ❌ **i18n.** `mst_guild.lang` stored, unused. No `t()` seam.
-- ❌ **Prefix commands.** `mst_guild.prefix` + `bot.default_prefix` stored, read by nothing.
+- ✅ ~~i18n~~ **— the seam exists**; coverage is partial and the games are unconverted. See above.
+- ✅ ~~Prefix commands~~ **— answered and redirected**, not rebuilt. See above.
 - ✅ ~~Autocomplete is UNUSED~~ **— no longer true.** `/coinflip` and `/dice` both declare it, because Ote
   wanted the call **typed, not picked** (*"plain chat better ux"*). It had been dead since `/buy` was deleted.
-- ❌ **No supervisor.** The process exits with a real code and never restarts itself.
+- ✅ ~~No supervisor~~ **— the run scripts are one.** Exit 42 = restart; anything else stops.
+- ❌ **Music.** `play`/`q`/`skip`/`pause`/`resume`/`dc` — three separate implementations in the legacy,
+  still out of scope. The voice stack now exists, so this is smaller than it was.
+- ❌ **`activity`** (Discord voice-channel activities), **`server list`** (every guild the bot is in),
+  **selling items back**, **minesweeper** (skipped on his instruction).
 
 ## ⭐ DECIDED — Ote, with his words
 

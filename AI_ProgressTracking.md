@@ -712,3 +712,113 @@ feedback our new system. also hold the process while we in dev for me. start, pu
 - ⏭ Not built, and deliberately: no per-row status change (`actioned`/`declined` exist in the CHECK and only
   `read` is reachable from the UI), and no notification to admins on arrival. Both are easy later; neither was
   asked for.
+
+## 2026-08-13 (final) — the seven leftovers Ote asked for: i18n, help, rand, trans, prefix, status, restart, TTS
+
+Ote listed them: *"can you try TTS / i18n? / restart / help / rotating status · avatar self-check / rand /
+trans / prefix commands? is this still work?"*. All eight attempted, in three commits so each was verifiable
+before the next touched anything.
+
+### PREFIX COMMANDS — the question first
+**Yes, they still work.** They need the Message Content privileged intent, which this bot already has for typed
+guesses and wordle. What changed is that Discord pushed everything toward slash commands — discoverable,
+validated, autocompleted, usable without a privileged intent — and Message Content becomes gated behind
+verification above 100 servers.
+⚠️ **So they are NOT rebuilt, they REDIRECT.** Rebuilding would mean an adapter faking an Interaction for every
+handler (options API, defer, editReply, buttons, modals, ephemerality) and **a modal cannot be opened from a
+message at all** — a second command surface to maintain forever, for a mechanism Discord is moving away from.
+What IS worth having: his players have `\\fishing` in their fingers after three years, so the old prefix now
+gets *"that is `/fishing` now"* instead of silence, including for renamed commands. ⭐ **`mst_guild.prefix`,
+stored since migration 001 and read by nothing, is finally read** — and settable via `/server set`.
+
+### i18n — a catalogue, deliberately not his mechanism
+His `translate_msg_out` machine-translated **every user-facing string at send time** via `googletrans`. Four
+reasons that is not rebuilt: (1) **a network call per string on the hot path** — his `/market` embed alone is a
+dozen round trips in front of Discord's 3-second window, which this project already restructured every command
+around; (2) **non-deterministic**, so every message assertion in 375 checks would become a check on a third
+party's mood; (3) **it mangles what is not prose** — markdown, mentions, emoji, `{counts}` — and his own text
+shows the seams (`"The player chose Insurance!)🤝(ยอม"`, a Thai word left inside an English sentence);
+(4) `googletrans` is an **unofficial scraper** and would be a hard dependency of the bot speaking at all.
+⇒ `lib/i18n.js` with `t()`, catalogues in `app/i18n/{en,th}.js`, **63 keys each, both 100%**. Thai first
+because it is his and his players' language. ⚠️ **COVERAGE IS PARTIAL AND SAYS SO** — 8 surfaces converted, the
+**games are not** (several hundred strings, many with counts and lists; doing it badly is worse than not doing
+it). `missingKeys()`/`strayKeys()` make it measurable, and 🔑 **a test forbids stray keys** because a mistyped
+key falls back to English silently and would never be noticed. ⭐ The **credits are deliberately NOT in the
+catalogue** — "Art" would become a common noun in half the languages on earth — and a test asserts that.
+⭐ `/trans` survives as a command: translating *on request* is worth a round trip even though translating
+everything is not. A locale cache (60s, invalidated on write) keeps the message path free — his `lang_out()`
+re-read and re-parsed the whole settings file **once per string**.
+
+### /help, /rand
+⭐ `/help` is **generated from the live cog registry**. His was a hardcoded string that had already drifted: it
+advertised `wordle` as playable when **no wordle command existed**, and described a "gray" miss colour where the
+code drew red. A generated list cannot say that. ⚠️ `/rand` FIXED: his refused equal bounds with "invalid
+format" — `rand 5 5` is a question with one answer, not a format error. His credit to **มิกกี้** is in the footer.
+
+### Rotating status + avatar self-check
+⭐ His 14-line cycle is back, at **60 seconds not 7**. Seven is **12,342 presence updates a day** against a
+~5-per-20s limit, on the gateway connection the bot needs for commands — his sat near the ceiling for pure
+decoration. Clamped to a 15s floor so it cannot be configured back into trouble; `null` disables. His lines are
+kept nearly verbatim (it is the bot's voice) minus the ones advertising things that no longer exist: "Invite
+link is HERE👇" pointed at a vanished message and `<Prefix>Help` was never substituted.
+⚠️ **The avatar check has two changes.** (1) Compared by Discord's **avatar HASH, not bytes** — Discord
+re-encodes uploads, so his byte comparison could never match and **would have re-uploaded on every boot**.
+(2) **ONE attempt, never retried** — avatar changes are limited to roughly **two an hour** and his retried in a
+loop, which burns the budget and keeps failing. Off unless `bot.avatar_file` is set, because uploading an
+avatar is a visible account-level change that should not happen because someone cloned a repo.
+
+### restart — by asking to be restarted
+His did `os.system("python MCGB_Launcher.py")` from inside the running process, which **blocks the dying parent
+on its own replacement** and leaves it in the process tree; `main.js`'s header has flagged that since day one.
+⇒ The process does not restart itself, **it asks**: exit code **42** means "start me again", and
+`run_windows.bat`/`run_linux.sh` are now the supervisor loop. Anything else stops. `run_linux.sh` no longer uses
+`exec`, because exec would replace the very shell that has to do the restarting. ⚠️ `MCGB_SUPERVISED=1` is
+exported by those scripts and **`/admin restart` refuses without it** — a restart button that silently kills the
+bot for good is worse than no button. His countdown, presence change and **"I'm back! :D"** are all kept, the
+greeting via a notice file **cleared when read** so a failed announcement cannot make the bot greet forever.
+⚠️ `run_windows.bat` also had its **CRLF endings restored** — it had been written with LF, and an LF-only batch
+file misbehaves around `goto` labels, which it now has.
+
+### 🔑 A REAL MISTAKE OF MINE, now permanently tested against
+I first put the restart flag in `main.js` and had the admin cog import it. **`main.js` is the composition root,
+so importing it RUNS it** — loading that one cog **started a second bot** against the same database and gateway,
+and inside the bot's own cog loader that would have been a nested bot on every single boot. Caught because a
+stray `Starting MowCodeGamingBoteY` appeared in the output of an import that should print nothing. The flag now
+lives in `app/bot/restart.js`, a leaf, and **a test greps every file under `app/`, `lib/` and `database/` to
+assert nothing imports `main.js`** ever again. The rule: dependencies point AT the leaves.
+
+### TTS
+⭐ His `tts_cog`, rebuilt — which supersedes the earlier *"Gaming only, first"* scope call, recorded so the
+reversal is deliberate rather than drift. **No native builds needed**: `@discordjs/voice` + `@noble/ciphers`
+for encryption, and ffmpeg asked to emit **ogg/opus directly** so Discord takes the packets untouched — no
+`@discordjs/opus`, no PCM re-encode in JavaScript. `ffmpeg-static` is bundled so it works without ffmpeg on
+PATH. Same speech source as his gTTS (Google's `translate_tts`) without the library, since Node 24 has `fetch`.
+**Six defects fixed:** (1) 🔑 **one temp file per server, overwritten while playing** — he saved to
+`tts_temp/{server_id}_tts.mp3` and played that path, so the next message wrote the file ffmpeg was still
+reading, and they were never cleaned up; **there is no temp file here at all**, the mp3 streams into ffmpeg's
+stdin; (2) `discord.utils.get(...)` was not None-checked before `.play()`, only inside the queue loop;
+(3) **a busy-wait queue** — two nested infinite loops polling `is_playing()` five times a second per guild,
+now advancing on the player's **Idle event**; (4) **the language was hardcoded to `"th"`** with the per-server
+lookup commented out directly above it; (5) **no limits at all** in a feature whose job is reading whatever
+anyone types aloud — now a length cap, a capped queue that drops the newest, bound-channel only, and silence
+when no human is in the voice channel (his would read a chat to an empty room until told to leave);
+(6) `tts_data_del` used `del` on a possibly-absent key.
+⚠️ **A test caught a real off-by-one of mine**: `lastIndexOf(". ")` returns the index **of** the period, so
+cutting there sliced the punctuation off every chunk. Sentence boundaries cut one past; space boundaries cut at.
+⭐ **Thai chunking has its own test** because Thai has no spaces *and Thai is the language his TTS was hardcoded
+to* — a space-only split would never fire and the endpoint would truncate. Voice is also torn down **before**
+the gateway on shutdown, as his restart did, so a restart cannot leave the bot appearing to sit silently in a
+channel until Discord times it out.
+⚠️ **NOT VERIFIED: audibility.** Everything up to the last inch is checked against the real services — the
+endpoint returns 25KB of genuine Thai mp3, ffmpeg transcodes it to valid **Ogg/Opus with an OpusHead**, the
+connection reaches Ready, the queue advances on Idle — but confirming sound comes out needs a human in a voice
+channel. The cog logs the voice dependency report on load (`encryption OK, ffmpeg OK` on this machine), which
+is the first thing to check if it joins and says nothing.
+
+### State
+**375 checks pass** (up from 318 — 57 new), 16 cogs, 22 commands, 13 tables, 35 commits. The bot is **running
+supervised** so `/admin restart` works: PID recorded in `logs/bot.pid`, `MCGB_SUPERVISED=1`.
+⏭ **Still not ported:** music (three implementations in the legacy; the voice stack now exists so it is smaller
+than it was), `activity` (Discord voice-channel activities), `server list`, selling items back, minesweeper
+(skipped on his instruction). **Deliberately not rebuilt:** the file browser (no admin check, path handling
+broken, shared mutable state) and prefix commands as commands.
