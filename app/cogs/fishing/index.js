@@ -23,6 +23,9 @@ import {
     getFishPool,
     fishRate,
     summariseCatch,
+    animationFrame,
+    animationFrameCount,
+    seaPicture,
     AUTO_CAST_LIMIT,
 } from "../../data/fishing.js";
 
@@ -131,10 +134,11 @@ async function castOnce(interaction, ctx) {
 async function castEverything(interaction, ctx) {
     await ensurePlayer(ctx.db, interaction.user);
 
-    // The legacy animated for up to 30 seconds. One defer, one edit — the wait is
-    // real work now, not a slideshow.
     await interaction.deferReply();
 
+    // The batch is computed and committed FIRST, in one transaction. The animation below
+    // is a reveal of a result that is already safe on disk — the legacy drew its frames
+    // while rewriting the players file four times per rod.
     const result = await castAll(ctx.db, {
         discordId: interaction.user.id,
         guildId: interaction.guildId,
@@ -143,10 +147,12 @@ async function castEverything(interaction, ctx) {
     if (result.outOfRods) {
         await interaction.editReply(
             `${interaction.user}, **you have no fishing rods left.** ` +
-            `The market would sell you more, but it is not built yet.`,
+            `Buy some with \`/market buy item:Fishing rod\`.`,
         );
         return;
     }
+
+    await playFishingAnimation(interaction, ctx, result.casts);
 
     const summary = summariseCatch(result.caught);
 
@@ -185,6 +191,45 @@ async function castEverything(interaction, ctx) {
     });
 
     await interaction.editReply({ embeds: [embed] });
+}
+
+/**
+ * The legacy's fishing animation: a new sea frame every second while the rods "burn".
+ *
+ * ⚠️ Frame count comes from `animationFrameCount()`, which keeps his own `rod_left < 21`
+ * throttle — a full 30-rod run draws no frames, exactly as his did. Turn it off entirely
+ * with `bot.fishing_animation: false`.
+ *
+ * Never lets a failed edit kill the command: the result matters, the slideshow does not.
+ */
+async function playFishingAnimation(interaction, ctx, casts) {
+    if (ctx.config.bot?.fishing_animation === false) return;
+
+    const frames = animationFrameCount(casts);
+    if (frames === 0) return;
+
+    const picture = seaPicture();
+
+    for (let frame = 0; frame < frames; frame += 1) {
+        const embed = new EmbedBuilder()
+            .setColor(0x00ff00)
+            .setTitle("You are in the great sea and fishing peacefully with all the rods you have.")
+            .setDescription(
+                `This will take about ${casts - frame} second${casts - frame === 1 ? "" : "s"}.` +
+                animationFrame(),
+            )
+            .setImage(picture)
+            .setFooter({ text: `${ROD} ${frames - frame} to go` });
+
+        try {
+            await interaction.editReply({ embeds: [embed] });
+        } catch {
+            // A rate limit or a deleted message ends the animation, not the command.
+            return;
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
 }
 
 async function rates(interaction, ctx) {

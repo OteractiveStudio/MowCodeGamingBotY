@@ -11,7 +11,8 @@
     "bot:register": "node scripts/register-commands.js",
     "test": "node test/pipeline/test-all.mjs",
     "test:unit": "node test/pipeline/test-all.mjs --unit-only",
-    "db:seed": "node database/scripts/seed.js"
+    "db:seed": "node database/scripts/seed.js",
+    "dev:animation": "node -e \"import('./app/data/fishing.js').then(m=>{for(let i=0;i<3;i++)console.log(m.animationFrame())})\""
   },
   "keywords": [
     "discord",

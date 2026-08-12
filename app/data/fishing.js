@@ -251,6 +251,78 @@ export async function castAll(db, options) {
     return cast(db, { ...options, casts: AUTO_CAST_LIMIT });
 }
 
+// ── The animation ────────────────────────────────────────────────────────────
+//
+// ⭐ Ported from the legacy `fishing_animetion()`, unchanged, because it is the thing he
+// noticed missing within one command of testing. Two rows: a sky of sunrises with a rower
+// dropped in at a random spot, over a sea of waves with one random creature surfacing.
+//
+// ⚠️ It is now a REVEAL, not a live feed. The legacy drew a frame per cast *while* it
+// rewrote the players file 4 times per rod; here the whole batch is already computed and
+// committed in one transaction before the first frame is drawn. Identical to watch, and the
+// coins are safe before the animation starts rather than during it.
+
+/** His list, verbatim — including the custom slime emoji and the amogus. */
+export const ANIMATION_CREATURES = [
+    "🎣", "🦈", "🐬", "🐟", "🐠", "🐡", "🐳", "🐋",
+    "<:slimesus:946402258822778961>",
+    "🐢", "🐲", "🐉", "🦐", "🦑", "🐙", "🐚", "🦞", "🦀",
+    "<:slimesus:946402258822778961>",
+    "🌊", "𐐘ඞ", "𐐘ඞ",
+];
+
+/**
+ * One frame. `random` is injectable so the shape can be tested.
+ *
+ * The legacy used `sea.insert(random.randint(0, 9), fish)` on a 10-wave list and
+ * `sky.insert(random.randint(0, 8), rower)` on a 9-sunrise list, so the sea ends up 11 wide
+ * and the sky 10. Reproduced exactly — the ragged edge is part of the look.
+ */
+export function animationFrame(random = Math.random) {
+    const creature = ANIMATION_CREATURES[Math.floor(random() * ANIMATION_CREATURES.length)];
+
+    const sea = Array(10).fill("🌊");
+    sea.splice(Math.floor(random() * 10), 0, creature);
+
+    const sky = Array(9).fill("🌅");
+    sky.splice(Math.floor(random() * 9), 0, "🚣‍♂️🎣");
+
+    return `\n${sky.join("")}\n${sea.join("")}`;
+}
+
+/**
+ * A random ocean photo for the embed.
+ *
+ * ⚠️ His list had nine URLs; the two `encrypted-tbn0.gstatic.com` entries were Google image
+ * thumbnails, which are not stable links and are dropped. The rest are Wikimedia / Flickr /
+ * Pixabay / Pixahive and are left as they were. If one has rotted since 2022, Discord simply
+ * shows no image — it does not break the command.
+ */
+export const SEA_PICTURES = [
+    "https://upload.wikimedia.org/wikipedia/commons/4/48/Atlantis_-_Island_In_The_Middle_Of_The_Ocean_-_Middle_Of_Nowhere_-_panoramio.jpg",
+    "https://live.staticflickr.com/3917/18857233062_3c6989d426_z.jpg",
+    "https://cdn.pixabay.com/photo/2014/03/04/12/07/ocean-279440_1280.jpg",
+    "https://live.staticflickr.com/65535/50838642242_a5a7a0918c_b.jpg",
+    "https://live.staticflickr.com/4678/27877614039_6c7cc229e0_b.jpg",
+    "https://pixahive.com/wp-content/uploads/2020/12/Ocean8217s-Afterglow-258318-pixahive.jpg",
+    "https://live.staticflickr.com/65535/68724171_0e3007f065_b.jpg",
+];
+
+export function seaPicture(random = Math.random) {
+    return SEA_PICTURES[Math.floor(random() * SEA_PICTURES.length)];
+}
+
+/**
+ * How many frames to draw for a run of N casts.
+ *
+ * ⚠️ The legacy's own throttle, kept: `if rod_left < 21` — it only animated runs of 20 or
+ * fewer, so a full 30-rod run showed one frame and then the result. That is what keeps this
+ * from being 30 message edits, and it is his number, not mine.
+ */
+export function animationFrameCount(casts) {
+    return casts < 21 ? casts : 0;
+}
+
 /** Group a batch of catches for display: what, how many, worth how much. */
 export function summariseCatch(caught) {
     const byFish = new Map();

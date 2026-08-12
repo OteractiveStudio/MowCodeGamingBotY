@@ -18,6 +18,10 @@ import {
     fishRate,
     drawFish,
     summariseCatch,
+    animationFrame,
+    animationFrameCount,
+    seaPicture,
+    SEA_PICTURES,
     AUTO_CAST_LIMIT,
 } from "../../app/data/fishing.js";
 import { FISH } from "../../database/seeds/reference_data.js";
@@ -138,6 +142,54 @@ export default [
         label: "the auto cap is the legacy's 30",
         fn: () => {
             assert.equal(AUTO_CAST_LIMIT, 30);
+        },
+    },
+    {
+        label: "the animation frame is his shape: a 10-wide sky over an 11-wide sea",
+        fn: () => {
+            // sky = 9 sunrises with the rower inserted -> 10 cells
+            // sea = 10 waves with one creature inserted -> 11 cells
+            const frame = animationFrame(() => 0);
+            const lines = frame.split("\n");
+            assert.equal(lines[0], "", "the frame should start with a newline, as his did");
+            assert.equal([...lines[1].matchAll(/🌅/g)].length, 9);
+            assert.ok(lines[1].includes("🚣‍♂️🎣"), "the rower is missing from the sky");
+            assert.equal([...lines[2].matchAll(/🌊/g)].length, 10);
+        },
+    },
+    {
+        label: "the creature moves around and varies between frames",
+        fn: () => {
+            const random = lcg(4242);
+            const frames = new Set();
+            for (let i = 0; i < 40; i += 1) frames.add(animationFrame(random));
+            assert.ok(frames.size > 5, `expected varied frames, got ${frames.size} distinct`);
+        },
+    },
+    {
+        label: "his own throttle is kept: runs of 21+ casts draw no frames",
+        fn: () => {
+            // The legacy condition was `if rod_left < 21`, which is what stopped a full
+            // 30-rod run from being 30 message edits.
+            assert.equal(animationFrameCount(1), 1);
+            assert.equal(animationFrameCount(10), 10);
+            assert.equal(animationFrameCount(20), 20);
+            assert.equal(animationFrameCount(21), 0);
+            assert.equal(animationFrameCount(30), 0);
+        },
+    },
+    {
+        label: "every sea picture is an https URL, and the gstatic thumbnails are gone",
+        fn: () => {
+            assert.ok(SEA_PICTURES.length > 0);
+            for (const url of SEA_PICTURES) {
+                assert.match(url, /^https:\/\//, `${url} is not https`);
+                assert.ok(
+                    !url.includes("gstatic.com"),
+                    "a Google image thumbnail survived — those links are not stable",
+                );
+            }
+            assert.ok(SEA_PICTURES.includes(seaPicture(() => 0)));
         },
     },
     {
