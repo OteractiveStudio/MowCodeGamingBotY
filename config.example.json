@@ -11,6 +11,7 @@
         "message_content_intent": false
     },
     "bot": {
+        "admin_ids": [],
         "default_lang": "en",
         "default_prefix": "+"
     },

@@ -27,10 +27,10 @@ import {
     ButtonBuilder,
     ButtonStyle,
     MessageFlags,
-    PermissionFlagsBits,
     InteractionContextType,
 } from "discord.js";
 
+import { isBotAdmin } from "../../bot/permissions.js";
 import { ensurePlayer } from "../../data/player.js";
 import { getState, addMoney, toInt } from "../../data/economy.js";
 import {
@@ -353,13 +353,15 @@ async function cancelGame(interaction, ctx) {
     }
 
     const isStarter = interaction.user.id === game.starterId;
-    // The legacy allowed the starter, an admin, or the guild's bot_manager_role. Discord's
-    // own permission model covers the second two without a role id in our config.
-    const isModerator = interaction.memberPermissions?.has(PermissionFlagsBits.ManageMessages) ?? false;
+    // ⚠️ Ote, after a player with merely Manage Messages cancelled his game: "make it only admin
+    // for now please". Manage Messages is a SERVER moderation permission and says nothing about who
+    // runs this bot, so the check is now config.bot.admin_ids — the descendant of his
+    // settings.json admin_list, kept in a file no command can edit.
+    const isAdmin = isBotAdmin(ctx.config, interaction.user.id);
 
-    if (!isStarter && !isModerator) {
+    if (!isStarter && !isAdmin) {
         await respond(interaction, {
-            content: "Only the player who started this game can cancel it.",
+            content: `Only <@${game.starterId}> can cancel this game.`,
             flags: MessageFlags.Ephemeral,
         });
         return;
@@ -565,7 +567,7 @@ async function finishGame(channel, ctx, outcome, winnerId = null, byId = null) {
     } else {
         lines.push(
             byId
-                ? `<@${byId}> cancelled the game as a moderator. Nobody paid anything.`
+                ? `<@${byId}> cancelled the game as a bot admin. Nobody paid anything.`
                 : "A moderator cancelled the game. Nobody paid anything.",
         );
     }
