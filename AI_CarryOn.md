@@ -9,8 +9,8 @@
 
 ## ▶▶ START HERE
 
-**The bot is LIVE in Ote's server, the game loop works, and FIVE games are playable.**
-10 cogs · **13 commands** · 11 tables · **236 tests** · 27 commits on `main`.
+**The bot is LIVE in Ote's server, the game loop works, and SIX games are playable.**
+11 cogs · **15 commands** · 11 tables · **267 tests** · 28 commits on `main`.
 ⛔ **`mst_player` is EMPTY — the economy was deliberately started over on 2026-08-13.** See DECIDED.
 
 🔑 **RUN IT WITH `run_windows.bat`** (or `node main.js`), **NEVER `npm start`** — see TRAPS #9. npm runs the
@@ -24,7 +24,7 @@ npm install
 cp config.example.json config.json    # token + DB password go here; gitignored
 npm run db:migrate                    # 001-004 — idempotent
 npm run db:seed                       # fish, items, market — idempotent
-npm test                              # 236 checks, real exit code
+npm test                              # 267 checks, real exit code
 npm run bot:register                  # ONLY after changing a SlashCommandBuilder
 run_windows.bat                       # or: node main.js  (NEVER npm start)
 ```
@@ -43,8 +43,9 @@ Ote's instruction. Its token is in `config.json` via `DevTools/maintenance/use-l
 | ✅ **Economy** | Coins, exp, level, crystals. Cascade is pure + unit-tested. Every mutation writes `log_economy` **in the same transaction**. 🔑 Measured: legacy read-modify-write lost **147 of 150** coins under 50 concurrent credits; this loses **0**. |
 | ✅ **Fishing** | Weighted draw (`10 - tier`), 9 fish, 66 total weight. `auto` = 30 rods in **ONE transaction**. **His animation is restored**, with his own `rod_left < 21` throttle. |
 | ✅ **Market** | **Public click-through**: full contents visible, direct buttons per section and item, quantity buttons, modal for a custom amount, **Close** button. Owner-gated — anyone may click, non-owners get a private rejection. |
-| ✅ **Games (5)** | `/guess` — **type a bare number in chat**, his original UX. The Guess button and its modal were REMOVED at his request; `/guess try` survives as the guaranteed path. Cancel = **starter or a config bot admin**. `/ox` — 3×3 **button grid** labelled 1–9, vs bot or duel, give-up settles as a loss. |
+| ✅ **Games (6)** | `/guess` — **type a bare number in chat**, his original UX. The Guess button and its modal were REMOVED at his request; `/guess try` survives as the guaranteed path. Cancel = **starter or a config bot admin**. `/ox` — 3×3 **button grid** labelled 1–9, vs bot or duel, give-up settles as a loss. |
 | ✅ **Coinflip + dice** | `/coinflip` — call a side for 3..half your money (default = half; min 6 to play, a **derived** limit). `/dice` — 2..1000, default 10; even/odd/high/low 1:1, **exact face ×3 as profit** (so 4× in hand); high is `>3`; **his 5-frame animation restored**. ⭐ Both take the call as **TYPED FREE TEXT with his alias table** (`h`/`head`/`หัว`, `e`/`even`/`คู่`, bare `1`-`6`), NOT a dropdown — *"plain chat better ux"*. Autocomplete hints, does not gate. |
+| ✅ **Blackjack** | `/blackjack` + `/bj` (his `bj`/`Bj`/`BJ` trio collapsed — slash names are lowercase). Buttons replace typed `h`/`s`/`dd`/`sd`/`in`. **Hands are PUBLIC** — ⚠️ an earlier carry-on note claimed it needed ephemeral hands "so players cannot see each other's cards"; **that was wrong**, his blackjack is one player vs the dealer, so only the hole card hides. 🔑 **His version had 10 real defects — see `app/data/blackjack.js`'s header, all FIXED and numbered.** Measured after the fix: **4.73% naturals** (theory 4.83%) and a **−0.92% house edge** over 20,000 simulated hands, which his 13-card deck made impossible. |
 | ⚖️ **The high-roller brake is PORTED** | Above `bot.high_roller_threshold` (default **100000**, `>` so it starts at 100,001) the coin appends **the opposite of the player's own call** — win odds 1/2 → **1/3**, EV **−bet/3**. Biased against the *player*, not a side; re-read every flip so **1-2 max-bet losses switch it off** (a soft ceiling). ⭐ Ote: *"yeah it was my an anti-inflation thing"*. **VISIBLE** (own embed field, before the result) and **LOGGED** at `warning` + ledger `ref` suffix `:highroller`, both at his request. Set the config key to `null` to disable. |
 | ✅ **Stealing** | `/steal` + `/crime`. **The five prop items finally work**, and the mechanic came from his own item text: passkey=steal 35% · knife=rob 50% · gun=rob 70% · cat defends steal −30% · dog defends both −50%. Tool is **consumed** either way; 10-min cooldown on `last_steal_at`; up to a third of theirs, a third of yours as bail. Crime pays **no exp**. |
 | ✅ **Bot admins** | `config.bot.admin_ids` — his legacy `admin_list` ids, moved out of player rows (where `reset_player` could wipe them) into config. `app/bot/permissions.js`, tested to never default open. |
@@ -54,7 +55,7 @@ Ote's instruction. Its token is in `config.json` via `DevTools/maintenance/use-l
 
 ## ❌ What does NOT exist
 
-- ❌ **Blackjack, wordle, minesweeper.** `guess`, `ox`, `steal`, `coinflip` and `dice` are what exist.
+- ❌ **wordle, minesweeper.** `guess`, `ox`, `steal`, `coinflip`, `dice` and `blackjack` are what exist.
 - ❌ **Admin COMMANDS.** `admin_ids` exists and gates game cancellation, but there is no `/money` adjust,
   no `data` editor, no `file` explorer, no `restart`.
 - ❌ **Selling items back.** Buying only — the legacy had no sell either.
@@ -190,9 +191,20 @@ Ote's instruction. Its token is in `config.json` via `DevTools/maintenance/use-l
    objection is the pair of conditions he attached: it is **visible** and it is **logged**, so it reads as a
    rule rather than as bad luck. Implementation is in `app/data/coinflip.js` + `app/cogs/coinflip/index.js`,
    measured over 60,000 flips in `test/unit/coinflip-rules.test.mjs`.
-2. **Blackjack** — the big one. Needs **ephemeral hands** so players cannot see each other's cards, emoji
-   cards, and ace prompting. `player_hand`/`playing_bj` were module-level in the legacy, so it hosted one
-   game bot-wide; use `ChannelSessions`.
+2. ✅ **DONE — blackjack.** ⚠️ And the note that used to sit here was WRONG twice over: it said "needs
+   ephemeral hands so players cannot see each other's cards", but his blackjack is **one player against the
+   dealer** — there are no other players' cards, only the dealer's hole card, so the table is public like
+   everything else. **His version had 10 real defects**, all fixed and individually numbered in
+   `app/data/blackjack.js`'s header. The three that mattered most: the **deck was 13 cards with no suits**
+   (a pair was impossible and the shoe ran dry mid-hand), `randrange(0, len-1)` **could not draw the last
+   card and raised ValueError at one card left**, and the **ace was always 1**, so his "blackjack" was a hand
+   worth 11 that he paid ×1.5 for. Also: no bust check while hitting, a fallback that returned a string where
+   callers indexed `[1]`, insurance that charged −1.5× and let the main bet stay live, and module-level state
+   that meant one hand bot-wide with no timeout. 🔑 Verified by simulation after the fix: **4.73% naturals**
+   against a theoretical 4.83%, and a **−0.92% house edge** over 20,000 hands. ⭐ **KEPT deliberately:** 20 to
+   sit down / min bet 10 / max bet half, natural ×1.5 truncated, surrender half, double ±2×, and
+   **`DEALER_STANDS_ON: 16`** — real blackjack stands on 17, so it is very likely a misremembering, but it is
+   a house-edge change and it is his to make. One constant.
 3. **wordle** — `BN_bot/data/wordle/words.txt` + `daily_word.json` need importing as reference data.
 4. **minesweeper** — self-contained generator, the oldest file in the tree (2020, pre-Discord).
 5. **Admin commands** — `admin_ids` already exists; `/money adjust` is the obvious first one.

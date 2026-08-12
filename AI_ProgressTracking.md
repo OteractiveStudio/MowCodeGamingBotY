@@ -465,3 +465,76 @@ The work that came *before* this project is workspace-level and lives in
   emoji cards, and ace prompting; `player_hand`/`playing_bj` were module-level in the legacy so it hosted one
   game bot-wide, and `ChannelSessions` already exists for it. Then wordle (`words.txt` + `daily_word.json` need
   importing as reference data), minesweeper, and admin commands.
+
+## 2026-08-13 (later still) — blackjack, the one his old code got most wrong
+
+Ote: *"go down the list. adjust things as it should be done, as i toldm my old code are old"* — an explicit
+licence to fix rather than reproduce, which blackjack needed more than anything ported so far. Checked against
+**all three** of his copies (`CsGamingBot.py`, `BJ_dealer.py`, `Small BJ dealer.py`): they share every defect
+below, so these are his intended rules and not one bad copy a sibling file already corrected. His own comment
+on the fallback branch reads *"กรณีที่มันบัค (ขี้เกียจแก้ เล่นๆ ไปเหอะ)"* — "in case it bugs (too lazy to fix,
+let's just play)".
+
+**Ten defects, all fixed, individually numbered in `app/data/blackjack.js`'s header.** The interlocking ones:
+
+1. 🔑 **The deck was 13 cards, not 52.** `Deck = ['2️⃣',…,'**Ace**']` — one entry per rank, no suits — and
+   draws did `del Deck[i]`. So a **pair was impossible**, the shoe ran dry after 13 cards between both hands,
+   and the odds bore no relation to blackjack. His note on that very line, *"เดี๋ยวเปลี่ยนไปใช้ไฟล์รูปภาพแทน"*
+   ("will switch to image files later"), says the representation was a placeholder he never returned to.
+2. 🔑 **`random.randrange(0, len(Deck)-1)` could not draw the last card** — `randrange(0, n-1)` yields
+   `0 … n-2` — and at one card left it becomes `randrange(0, 0)`, which **raises ValueError**. His only guard
+   was `if len(Deck) < 5` inside the *hitting* branch, so the opening deal and the dealer's own draw could both
+   hit it. Now: shuffle once, draw off the top, no reachable-index arithmetic to get wrong.
+3. 🔑 **The ace was always 1.** `values['**Ace**'] = 1`, so his natural-blackjack check — a ten-value card AND
+   an ace in the opening hand — produced a hand worth **11 points** that he then paid ×1.5 for making 21. The
+   label and the arithmetic disagreed. Aces are soft now, so a natural really is 21 and `isNatural()` tests the
+   total rather than pattern-matching the cards.
+4. **No bust check while hitting.** His `hitting` branch drew and then re-printed the Hit/Stand prompt
+   unconditionally. A player could hit to 30 and keep being asked, discovering the bust only on Stand.
+5. **The fallback returned a string where callers indexed `[1]`** — so `money_add` received the string's
+   **second character** and any unhandled decision died in `int()`. Outcomes are typed and `settle()` throws on
+   an unknown one instead of having an untyped escape hatch.
+6. **`check_point` was called twice per settlement**, once for the message and once for the money — the same
+   shape as the guess-game bug where the message named one winner and the code paid another. Settled once here.
+7. ⚠️ **Insurance was not insurance.** His: hole card ten-value → **+bet×2** and the hand ends; otherwise
+   **−(bet + bet/2)** and the hand **continues** — so a failed "insurance" cost more than the whole bet *and*
+   left the main bet live. Now a real half-bet side wager at **2:1**, which exactly offsets the main bet when
+   the dealer has blackjack. **This is the one change with real economic effect**, so his numbers are recorded
+   in a test that runs, not just a comment.
+8. **One hand bot-wide.** `Deck`, `player_hand`, `dealer_hand`, `BJ_player`, `BJ_bet`, `ace_asked` were all
+   module-level globals. Keyed by channel now, on the existing `ChannelSessions`.
+9. **No timeout** — an abandoned hand held the global `BJ_player` forever and blocked blackjack in **every**
+   server until a restart. Five minutes now, and it **stands** the hand rather than forfeiting it: going quiet
+   should not cost more than surrendering, which costs half.
+10. **Dead state** — `got_A` written and never read, `playing_bj` gating nothing, `gloCTX` a module-level
+    "reply to whoever touched it last" context.
+
+- 🔑 **The fix is verified by simulation, not by inspection.** 20,000 hands through the real deal and settle
+  path: **4.73% naturals** against a theoretical **4.83%**, 27.3% player busts, 9.0% pushes, and a **−0.92%
+  house edge** per bet — a realistic blackjack edge. None of those numbers were reachable with a 13-card deck,
+  which is what makes them evidence rather than decoration. No exceptions thrown across the run, and the
+  session map emptied cleanly.
+- ⭐ **KEPT — his balance numbers:** 20 coins to sit down, min bet 10, max bet half your money, natural ×1.5
+  truncated (`int(bet * 1.5)`), surrender half, double down ±2×, push 0. And **`DEALER_STANDS_ON: 16`** — every
+  real blackjack dealer stands on 17, so this is very likely a misremembering rather than a decision, but it is
+  a house-edge change and therefore his to make. One named constant.
+- ⚠️ **A note in the carry-on was WRONG and is corrected rather than quietly dropped.** It had said blackjack
+  "needs ephemeral hands so players cannot see each other's cards" — but his blackjack is **one player against
+  the dealer**, so there are no other players' cards to hide. The table is **public**, matching what he asked
+  for everywhere else, with only the dealer's hole card face down.
+- ⭐ **The hand and the insurance side bet are SEPARATE ledger movements**, applied in one transaction. Netting
+  them would have written **nothing at all** for an insured hand against a dealer blackjack — the case where
+  insurance did its job — hiding the save from `/money history`. Verified against the real database: two rows
+  (`-10 blackjack:dealer_wins`, `+10 blackjack:insurance`), chain consistent, balance back where it started.
+- ⚠️ **Removed a button I had routed but never rendered.** `handleComponent` handled `blackjack:quit` while
+  `buttonsFor()` never drew it — dead code in a project that has already been bitten by exactly that. Surrender
+  is the player's way out at his price of half the bet, and the timeout clears an abandoned hand, so there was
+  nothing for a second button to do.
+- `/bj` exists beside `/blackjack` because he wrote `bj`, `Bj` and `BJ` as three commands forwarding to one.
+  Slash names must be lowercase, so the trio collapses to one short form.
+- **267 checks pass** (up from 236 — 31 new). The suite briefly measured 8.9s, which turned out to be a cold
+  database connection and not the new tests: three consecutive runs land at 0.7-0.8s, and every new unit file
+  times under 90ms individually. Worth recording so nobody optimises a phantom.
+- Next action: **wordle** — `BN_bot/data/wordle/words.txt` and `daily_word.json` need importing as reference
+  data, which makes it the first game to need a migration since 004. Then **minesweeper** (self-contained
+  generator, the oldest file in the tree at 2020, pre-Discord), then **admin commands**.
