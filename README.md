@@ -36,6 +36,7 @@ whole-file read-modify-write      →   one atomic statement per mutation
 | `/dice` | Roll a die. `even`/`odd`/`high`/`low` pays 1:1, calling the exact face pays **×3** |
 | `/blackjack` · `/bj` | Blackjack against the dealer — buttons for hit, stand, double down, surrender |
 | `/wordle start` · `board` · `rules` | Guess the hidden word — **type guesses in chat**, 4-6 letters, 6 tries |
+| `/admin money` · `player` · `reset` · `fish` · `stats` · `cogs` | Owner tools, behind one gate |
 | `/ping` · `/about` | Liveness, and the credits |
 
 **The core loop works**: buy rods → fish → earn coins and exp → level up → buy more. On the original's rules,
@@ -212,6 +213,32 @@ homemade wordles get wrong. Greens are marked first and blank out both sides, th
 one-for-one — so guessing a word with three E's against a target holding one marks exactly one. That algorithm
 is kept as it was written.
 
+### Built: owner tools
+
+`/admin money` adjusts a balance, `/admin player` shows everything the database knows about someone,
+`/admin reset` returns one player to starting values, `/admin fish` changes a fish's price or tier, and
+`/admin stats` and `/admin cogs` report on the bot itself.
+
+**One gate, at the top.** Every subcommand passes through a single permission check. The original re-read its
+admin flag and re-tested it inside each branch of each command — and its **file browser forgot to test it at
+all**, so anyone in any of its servers could list a directory on the bot's host machine and download files out
+of it. A single gate is the only shape a newly added branch cannot forget, and there is a test that hands the
+cog a database which throws on *any* access, so a subcommand reaching the data layer before the gate fails
+loudly.
+
+**Every change is attributed and announced.** An adjustment writes the admin's own id into the ledger row, so
+"where did these coins come from?" has an answer that names a person — a column that had sat unused since the
+first migration. The admin's confirmation is private, but the change itself is posted to the channel, because
+an economy where the owner can move coins invisibly is not one anyone should trust. Adjustments also grant **no
+exp** by default: the original's money function always granted exp equal to the money, so topping someone up by
+10,000 coins would have quietly handed them about thirteen levels.
+
+Three of the original's admin features are **deliberately not rebuilt**, and each is documented in the code so
+nobody restores one thinking it was an oversight: the **file browser** above; **"reset every player"**, which
+belongs in a maintenance script that takes a backup first rather than in a chat message; and **cog reloading**,
+because ES modules cache by URL and that cache cannot be invalidated — a reload would import nothing and report
+success, which is worse than not offering it.
+
 ### Still to port
 
 A **minesweeper** generator — the oldest file in the original, from 2020, written before any of it was a
@@ -282,7 +309,7 @@ That is what a database fixes, and it is the actual point of this project.
 **It is live and being played.** The bot runs in a real server on a real database.
 
 ✅ Economy, progression, fishing, market and inventory — all on the original's numbers · ✅ **seven games**:
-guess, OX, stealing, coinflip, dice, blackjack and wordle · ✅ a ledger that reconciles · ✅ **292 tests** against the real database, one command,
+guess, OX, stealing, coinflip, dice, blackjack and wordle · ✅ a ledger that reconciles · ✅ **304 tests** against the real database, one command,
 real exit code.
 
 **The economy starts from zero.** All 24 original players were imported, then deliberately removed: looking at
@@ -290,8 +317,8 @@ the real numbers side by side, the balances were not worth carrying forward — 
 rewrite had already reset 12 of those players to the starting 200 anyway. Everyone is provisioned fresh on
 their first command. The game content — fish, items, market listings — is seeded from the repo and unaffected.
 
-❌ **Still to port:** minesweeper · admin commands (`data` editor, `file`
-explorer, `restart`) · i18n · selling items back · prefix commands.
+❌ **Still to port:** minesweeper · a `restart` command (needs a supervisor) · i18n · selling items back ·
+prefix commands. **Deliberately not porting:** the file explorer — see below.
 
 The full ❌ list, and every decision behind the design, lives in [`AI_CarryOn.md`](AI_CarryOn.md).
 
@@ -302,7 +329,7 @@ npm install
 cp config.example.json config.json     # then fill it in — see below
 npm run db:migrate                     # create the schema (idempotent, safe to re-run)
 npm run db:seed                        # load the fish, items and market (also idempotent)
-npm test                               # 292 checks, real exit code
+npm test                               # 304 checks, real exit code
 npm run bot:register                   # publish slash commands to Discord
 node main.js                           # NOT npm start — see below
 ```
@@ -344,6 +371,7 @@ app/
     dice/                   /dice                         (typed call + autocomplete)
     blackjack/              /blackjack, /bj
     wordle/                 /wordle start | board | rules  (+ typed guesses)
+    admin/                  /admin money | player | reset | fish | stats | cogs
     guild/                  /server, and join/leave provisioning
     system/                 /ping, /about
   data/                     the only code that reads or writes rows

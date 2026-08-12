@@ -604,3 +604,64 @@ Ote: *"you can go on, then skip minesweeper to Admin commands"* — so wordle, t
   migration 002 — so the ledger has been waiting for it since the beginning. His originals to draw on: a data
   editor, a sandboxed file browser, cog reload/unload/list without restarting, and a restart command that
   counted down, swapped the avatar, left voice cleanly and posted "I'm back!" on its next boot.
+
+## 2026-08-13 (last of the day) — admin commands, and a bug of my own that a test caught
+
+`/admin money · player · reset · fish · stats · cogs`, from his `data_editor_cog`, `status_stats_cog` and the
+admin-gated half of `server_settings_cog`.
+
+- ⭐ **ONE GATE, AT THE TOP OF `execute()`** — not per-branch. His `data` command re-read `is_admin` and
+  re-tested it inside each branch, and 🔑 **his `file_explorer_cog` forgot to test it entirely**, so anyone
+  in any of the twelve servers could list a directory on the bot host and download files out of it. The test for
+  this hands the cog a **`db` Proxy that throws on ANY property access**, so a subcommand reaching the data
+  layer before the gate fails loudly with the reason attached. That is the property worth testing, not
+  `isBotAdmin` itself, which was already covered.
+- 🔑 **`log_economy.actor_id` IS FINALLY WRITTEN.** The column has existed since migration 002 and nothing
+  ever populated it. An `admin_adjust` row now records **who** made the change, so "where did these coins come
+  from?" has an answer that names a person. Verified against the real database: 2 of 2 `admin_adjust` rows
+  carried the admin's id, and the chain still reconciled.
+- ⚠️ **`/admin money` grants NO exp by default.** His `money_add` always granted exp equal to the money, so
+  an admin topping someone up by 10,000 coins would have handed them roughly **thirteen levels** as a side
+  effect. `grant_exp:true` opts in. Confirmed by measurement: +5,000 coins left the player at level 1, exp 0.
+- ⭐ **Reset is button-confirmed with the target encoded in the customId**, so there is **no
+  pending-confirmation state to strand** — the bug that dogged his market's reaction flow. His instinct was
+  right (a random integer typed back); this is the same idea without the state. ⚠️ Admin is **re-checked on
+  the click**, because a customId is client-supplied data: anyone who can see the message can send its id back.
+  There is a test for exactly that, and another proving a malformed target id is rejected *before* any query.
+- 🔑 **A BUG OF MINE, CAUGHT BY A TEST I HAD JUST WRITTEN — and it is now TRAPS #14.** I wrote
+  `respond(interaction, { flags: MessageFlags.Ephemeral })` throughout the admin cog. **It does nothing.**
+  `dispatch.js` defers every chat-input command *publicly* before the handler runs, and `editReply()` cannot
+  change ephemerality afterwards, so `respond.js` strips `flags` — as its own header documents. Every
+  "private" admin reply would have been **public**, which for `/admin player` means leaking someone's full
+  record into the channel. The fix is `defer: "ephemeral"` **on the command object** (`admin` is the first cog
+  in the tree to use it), and for the public half, `interaction.channel.send()` — **not `followUp()`, which
+  inherits the privacy of the original response**. All 11 misleading `flags` arguments were removed rather than
+  left in as decoration, since a flag that silently does nothing is worse than none. The test now asserts the
+  *mechanism* (`command.defer === "ephemeral"`) rather than a flag on the reply.
+- ⭐ **INSPECTIONS PRIVATE, CHANGES ANNOUNCED.** The admin gets a quiet reply; `money`, `fish` and `reset`
+  also post a **separate public embed** through `announce()`, because an owner moving coins invisibly is exactly
+  what an economy should not permit. `announce()` **logs** a failed post instead of swallowing it — the
+  mutation has already happened, so a thinner accountability trail should at least be findable.
+- ❌ **THREE OF HIS ADMIN FEATURES ARE DELIBERATELY NOT PORTED**, each documented in the cog header so nobody
+  rebuilds one thinking it was missed:
+  1. 🔑 **The file explorer.** No admin check at all; `if arg in "..."` is a **substring test against the
+     literal string** so an empty argument matched and walked the path upward; `file_location` was a **class
+     attribute mutated in place**, so one user's directory change moved it for every user in every server; and
+     its "is this a real directory" guard listed the **OLD** path. Even gated, "read arbitrary host files into a
+     chat message" is not worth rebuilding. **A security decision, recorded as one.**
+  2. **`data player reset all`** — his confirmed it with a random integer, which was the right instinct, but
+     it belongs in `reset-players.mjs`, which dry-runs and backs up first. Per-player reset IS here.
+  3. **Cog reload/unload** — his ran on `discord.py`'s `load_extension`. **ESM caches by URL with no
+     invalidation**, so a reload would import nothing and report success, which is worse than absent. `list` is
+     here; restarting is the honest answer.
+- ⏭ **Still open from his admin set:** `restart` (his counted down, swapped the avatar, left voice cleanly
+  and posted "I'm back!" on the next boot) needs a **supervisor**, still an undecided question in `main.js`'s
+  header; and his `server list` (every guild the bot is in) is not ported.
+- **304 checks pass** (up from 292 — 12 new), 13 cogs, 17 commands. Verified end to end against the real
+  database: provision → +5,000 with no exp → reset to 200, chain consistent, `actor_id` populated, temporary
+  player removed and `mst_player` back to 0.
+- Next action: nothing is queued. The port is **feature-complete against his game set** except minesweeper
+  (skipped on his instruction) and `restart` (needs a supervisor). Candidates if he wants more: **i18n** (his
+  bot supported 64 languages through a translation layer; `mst_guild.lang` is already stored and unused),
+  **selling items back** (his had no sell either), **prefix commands** (`mst_guild.prefix` and
+  `bot.default_prefix` are stored and read by nothing), or a **supervisor** so `restart` becomes possible.

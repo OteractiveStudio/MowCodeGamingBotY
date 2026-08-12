@@ -10,7 +10,7 @@
 ## ▶▶ START HERE
 
 **The bot is LIVE in Ote's server, the game loop works, and SEVEN games are playable.**
-12 cogs · **16 commands** · 12 tables · **292 tests** · 30 commits on `main`.
+13 cogs · **17 commands** · 12 tables · **304 tests** · 31 commits on `main`.
 ⛔ **`mst_player` is EMPTY — the economy was deliberately started over on 2026-08-13.** See DECIDED.
 
 🔑 **RUN IT WITH `run_windows.bat`** (or `node main.js`), **NEVER `npm start`** — see TRAPS #9. npm runs the
@@ -24,7 +24,7 @@ npm install
 cp config.example.json config.json    # token + DB password go here; gitignored
 npm run db:migrate                    # 001-005 — idempotent
 npm run db:seed                       # fish, items, market, 2004 wordle words — idempotent
-npm test                              # 292 checks, real exit code
+npm test                              # 304 checks, real exit code
 npm run bot:register                  # ONLY after changing a SlashCommandBuilder
 run_windows.bat                       # or: node main.js  (NEVER npm start)
 ```
@@ -52,14 +52,18 @@ Ote's instruction. Its token is in `config.json` via `DevTools/maintenance/use-l
 | ✅ **Bot admins** | `config.bot.admin_ids` — his legacy `admin_list` ids, moved out of player rows (where `reset_player` could wipe them) into config. `app/bot/permissions.js`, tested to never default open. |
 | ✅ **MESSAGE CONTENT intent is ENABLED** on the legacy application | Verified by a successful login with it requested (`wired 4 event binding(s)`). ⚠️ Requesting it without the portal toggle makes **login itself fail**; `app/bot/index.js` catches that, rebuilds without it, and says which switch to flip. Flag: `discord.message_content_intent`. |
 | ⛔ **Legacy players — IMPORTED, THEN DELETED** | **The economy started over on 2026-08-13.** All 24 imported players and their history were removed; see DECIDED. `mst_player` is **empty**. Everyone is provisioned fresh at 200 coins on their next command. **Do not re-import** — `import-legacy-players.mjs` now refuses. |
+| ✅ **Admin tools** | `/admin money · player · reset · fish · stats · cogs`. ⭐ **ONE gate** at the top of `execute()`, not per-branch — his `data` re-tested `is_admin` in every branch and his **`file` command forgot entirely**, so anyone in any of 12 servers could list and download files off the host. 🔑 **`log_economy.actor_id` is finally written** — unused since migration 002 — so an `admin_adjust` names *who* did it. ⚠️ `/admin money` grants **NO exp by default** (his `money_add` always did, so a 10,000 top-up would have handed out ~13 levels); opt in with `grant_exp:true`. Reset is button-confirmed with the target in the customId, so there is **no pending-confirmation state to strand**, and admin is **re-checked on the click** because a customId is client-supplied. |
 | ✅ **Drift check** | On boot, compares the published command list to the code and names what differs. Verified live. |
 
 ## ❌ What does NOT exist
 
 - ❌ **minesweeper.** ⏭ **SKIPPED at Ote's instruction** — *"then skip minesweeper to Admin commands"*. Everything else
   is built: `guess`, `ox`, `steal`, `coinflip`, `dice`, `blackjack`, `wordle`.
-- ❌ **Admin COMMANDS.** `admin_ids` exists and gates game cancellation, but there is no `/money` adjust,
-  no `data` editor, no `file` explorer, no `restart`.
+- ✅ ~~Admin COMMANDS~~ **— now built.** `/admin money · player · reset · fish · stats · cogs`, all behind ONE
+  gate. ❌ Still absent **on purpose**: a **file explorer** (his had *no admin check at all* — see below),
+  **`reset all`** (use `DevTools/maintenance/reset-players.mjs`, which backs up first), **cog reload** (ESM
+  caches by URL and cannot be invalidated, so a "reload" would import nothing and claim success), and
+  **`restart`** (no supervisor exists yet).
 - ❌ **Selling items back.** Buying only — the legacy had no sell either.
 - ❌ **i18n.** `mst_guild.lang` stored, unused. No `t()` seam.
 - ❌ **Prefix commands.** `mst_guild.prefix` + `bot.default_prefix` stored, read by nothing.
@@ -120,6 +124,14 @@ Ote's instruction. Its token is in `config.json` via `DevTools/maintenance/use-l
 12. ⚠️ **I claimed two OX payout bugs that DO NOT EXIST** — I stopped reading at the first win-check. `OX_out`
    has TWO, one per mover; the bot's win is handled separately and charges the human by index. His code was
    right. Corrected in `1a82080` and in `app/data/ox.js`'s header.
+14. 🔑 **`flags: Ephemeral` PASSED TO `respond()` IS SILENTLY DROPPED.** `dispatch.js` defers every
+   chat-input command **publicly** before the handler runs, and `editReply()` cannot change ephemerality
+   afterwards — so `respond(i, { flags: MessageFlags.Ephemeral })` produces a **PUBLIC** reply. Every such call
+   in the tree today is on a *rejection* where public is merely untidy, but `/admin` would have leaked player
+   inspections into the channel. ⇒ **A command that must answer privately declares `defer: "ephemeral"`** on the
+   command object (`app/cogs/admin/index.js` is the first and only user). To then post something public from an
+   ephemeral command, use `interaction.channel.send()` — **NOT `followUp()`, which inherits the privacy**.
+   Caught by a test asserting the refusal was ephemeral; it was not.
 13. 📌 **THERE ARE TWO LEGACY SAVES, FROM DIFFERENT ERAS — and the older one is not a backup.**
    `BN_bot/data/files/players_inv.json` (24 players, final, 2024) is the authoritative one and the only one
    ever imported. But `Reference/repos/MyBot_Legacy/data_username.txt` + `data_economy.txt` +
@@ -219,7 +231,18 @@ Ote's instruction. Its token is in `config.json` via `DevTools/maintenance/use-l
 4. ⏭ **SKIPPED — minesweeper.** Ote, 2026-08-13: *"then skip minesweeper to Admin commands"*.
    Still there if wanted: a self-contained generator, the oldest file in the tree (2020, written
    before any of it was a Discord bot).
-5. **Admin commands** — `admin_ids` already exists; `/money adjust` is the obvious first one.
+5. ✅ **DONE — admin commands.** `/admin money · player · reset · fish · stats · cogs`.
+   ⭐ **Three of his admin features are deliberately NOT ported**, each documented in
+   `app/cogs/admin/index.js`'s header so nobody rebuilds one thinking it was missed:
+   ❌ **the file explorer** — it had **no admin check at all**, `if arg in "..."` matched the empty string so a
+   bare argument walked the path upward, `file_location` was a **class attribute mutated in place** (one user's
+   `cd` moved everyone's directory across every server), and its "is this a real directory" guard listed the
+   OLD path. "Read arbitrary host files into a chat message" is not worth rebuilding.
+   ❌ **`reset all`** — `reset-players.mjs` does it with a dry run and a backup.
+   ❌ **cog reload** — ESM caches by URL with no invalidation, so it would import nothing and report success.
+   ⏭ **Still open:** his `restart` (counted down, swapped the avatar, left voice cleanly, posted "I'm back!" on
+   the next boot) needs a **supervisor**, which is still an open decision — see `main.js`'s header.
+   ⏭ **`/server` admin half** — his `server list` (every guild the bot is in) is not ported yet.
 
 ## 🧰 DevTools (workspace root, outside this repo, ungitted)
 
