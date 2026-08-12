@@ -26,7 +26,6 @@ import {
     SlashCommandBuilder,
     EmbedBuilder,
     ActionRowBuilder,
-    StringSelectMenuBuilder,
     ButtonBuilder,
     ButtonStyle,
     ModalBuilder,
@@ -183,13 +182,32 @@ export default {
             return;
         }
 
+        if (action === "close") {
+            // Closing means gone. Deleting is cleaner than leaving a dead embed in the
+            // channel; if the bot cannot delete it, collapse it to one line instead.
+            try {
+                await interaction.message.delete();
+            } catch {
+                await interaction.update({
+                    embeds: [
+                        new EmbedBuilder()
+                            .setColor(0x808080)
+                            .setDescription(`🏪 Market closed by <@${ownerId}>.`),
+                    ],
+                    components: [],
+                });
+            }
+            return;
+        }
+
         if (action === "back") {
             await interaction.update(await categoryView(ctx, ownerId));
             return;
         }
 
-        if (action === "cat" && interaction.isStringSelectMenu()) {
-            await interaction.update(await itemView(ctx, ownerId, interaction.values[0]));
+        // A direct section button, not a dropdown — parts[3] is the section.
+        if (action === "cat") {
+            await interaction.update(await itemView(ctx, ownerId, parts[3]));
             return;
         }
 
@@ -198,10 +216,9 @@ export default {
             return;
         }
 
-        if (action === "item" && interaction.isStringSelectMenu()) {
-            await interaction.update(
-                await quantityView(ctx, ownerId, parts[3], interaction.values[0]),
-            );
+        // A direct item button — parts[3] is the section, parts[4] the item.
+        if (action === "pick") {
+            await interaction.update(await quantityView(ctx, ownerId, parts[3], parts[4]));
             return;
         }
 
@@ -276,38 +293,56 @@ async function browse(interaction, ctx) {
     await interaction.reply(await categoryView(ctx, interaction.user.id));
 }
 
-/** Step 1: pick a section. */
+/**
+ * Step 1: the whole market, visible, with one direct button per section.
+ *
+ * ⚠️ Ote, on an earlier version that summarised each section as "2 items · from 1":
+ * *"why market now collapse like this? i like the old one where user can see what in it. and
+ * why it dropdown menu? not a direct button."*
+ *
+ * Both fixed here. The embed lists **every item with its price and description**, as his
+ * original did, and the sections are **buttons** — one click, no menu to open. His emoji
+ * reactions were direct too; a dropdown added a step he never had.
+ */
 async function categoryView(ctx, ownerId) {
     const categories = await getMarket(ctx.db);
 
     const embed = new EmbedBuilder()
         .setColor(0xffa500)
         .setTitle("🏪 The market")
-        .setDescription(`<@${ownerId}> is shopping. Pick a section.`)
-        .addFields(
-            categories.map((category) => ({
-                name: `${category.emoji ?? ""} ${category.display_name}`.trim(),
-                value:
-                    `${category.items.length} item${category.items.length === 1 ? "" : "s"} · ` +
-                    `from ${COIN} \`${Math.min(...category.items.map((i) => i.price))}\``,
-                inline: true,
-            })),
-        )
+        .setDescription(`<@${ownerId}> is shopping. Everything for sale:`)
         .setFooter({ text: "Anyone can watch. Only the shopper's clicks count." });
 
-    const select = new StringSelectMenuBuilder()
-        .setCustomId(`market:cat:${ownerId}`)
-        .setPlaceholder("Choose a section…")
-        .addOptions(
-            categories.map((category) => ({
-                label: category.display_name,
-                value: category.category_key,
-                description: `${category.items.length} items`,
-                emoji: category.emoji ?? undefined,
-            })),
-        );
+    // The full contents, exactly as the flat version showed them.
+    for (const category of categories) {
+        embed.addFields({
+            name: `${category.emoji ?? ""} ${category.display_name}`.trim(),
+            value: category.items
+                .map(
+                    (item) =>
+                        `${item.emoji ?? "▫️"} **${item.display_name}** — ${COIN} \`${item.price}\`\n` +
+                        `_${item.detail ?? ""}_`,
+                )
+                .join("\n"),
+        });
+    }
 
-    return { embeds: [embed], components: [new ActionRowBuilder().addComponents(select)] };
+    // One button per section — Discord allows 5 per row, and there are 3 sections.
+    const sectionButtons = categories.slice(0, 5).map((category) =>
+        new ButtonBuilder()
+            .setCustomId(`market:cat:${ownerId}:${category.category_key}`)
+            .setLabel(category.display_name)
+            .setEmoji(category.emoji ?? "🏷️")
+            .setStyle(ButtonStyle.Primary),
+    );
+
+    return {
+        embeds: [embed],
+        components: [
+            new ActionRowBuilder().addComponents(sectionButtons),
+            new ActionRowBuilder().addComponents(closeButton(ownerId)),
+        ],
+    };
 }
 
 /** Step 2: pick an item inside a section. */
@@ -334,24 +369,31 @@ async function itemView(ctx, ownerId, categoryKey) {
                 )
                 .join("\n"),
         )
-        .setFooter({ text: `${category.display_name} · shopper: only their clicks count` });
+        .setFooter({ text: `Pick an item. Only <@${ownerId}>'s clicks count.` });
 
-    const select = new StringSelectMenuBuilder()
-        .setCustomId(`market:item:${ownerId}:${categoryKey}`)
-        .setPlaceholder("Choose an item…")
-        .addOptions(
-            category.items.map((item) => ({
-                label: `${item.display_name} — ${item.price} coins`,
-                value: item.item_key,
-                description: (item.detail ?? "").slice(0, 100),
-                emoji: item.emoji ?? undefined,
-            })),
+    // A button per item, not a dropdown. Five per row, so a section with more than five
+    // wraps rather than collapsing into a menu.
+    const rows = [];
+    for (let start = 0; start < category.items.length; start += 5) {
+        rows.push(
+            new ActionRowBuilder().addComponents(
+                category.items.slice(start, start + 5).map((item) =>
+                    new ButtonBuilder()
+                        .setCustomId(`market:pick:${ownerId}:${categoryKey}:${item.item_key}`)
+                        .setLabel(`${item.display_name} · ${item.price}`)
+                        .setEmoji(item.emoji ?? "▫️")
+                        .setStyle(ButtonStyle.Secondary),
+                ),
+            ),
         );
+        if (rows.length === 4) break; // leave a row for navigation
+    }
 
-    return {
-        embeds: [embed],
-        components: [new ActionRowBuilder().addComponents(select), backRow(ownerId)],
-    };
+    rows.push(
+        new ActionRowBuilder().addComponents(backButton(ownerId), closeButton(ownerId)),
+    );
+
+    return { embeds: [embed], components: rows };
 }
 
 /** Step 3: how many? Only offers quantities that can actually succeed. */
@@ -418,9 +460,11 @@ async function quantityView(ctx, ownerId, categoryKey, itemKey) {
             new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
                     .setCustomId(`market:itemback:${ownerId}:${categoryKey}`)
-                    .setLabel("← Back to section")
+                    .setLabel("Back")
+                    .setEmoji("⬅️")
                     .setStyle(ButtonStyle.Secondary),
                 backButton(ownerId),
+                closeButton(ownerId),
             ),
         ],
     };
@@ -429,12 +473,22 @@ async function quantityView(ctx, ownerId, categoryKey, itemKey) {
 function backButton(ownerId) {
     return new ButtonBuilder()
         .setCustomId(`market:back:${ownerId}`)
-        .setLabel("← The market")
+        .setLabel("The market")
+        .setEmoji("↩️")
         .setStyle(ButtonStyle.Secondary);
 }
 
+/** ⚠️ Ote: *"and where's an option to close the market?"* — there wasn't one. Now there is. */
+function closeButton(ownerId) {
+    return new ButtonBuilder()
+        .setCustomId(`market:close:${ownerId}`)
+        .setLabel("Close")
+        .setEmoji("✖️")
+        .setStyle(ButtonStyle.Danger);
+}
+
 function backRow(ownerId) {
-    return new ActionRowBuilder().addComponents(backButton(ownerId));
+    return new ActionRowBuilder().addComponents(backButton(ownerId), closeButton(ownerId));
 }
 
 /** Do the buy and render the outcome, leaving the shopper inside the market. */
@@ -471,9 +525,11 @@ async function purchaseResult(ctx, interaction, ownerId, categoryKey, itemKey, q
                 new ActionRowBuilder().addComponents(
                     new ButtonBuilder()
                         .setCustomId(`market:itemback:${ownerId}:${categoryKey}`)
-                        .setLabel("← Buy something else")
+                        .setLabel("Buy something else")
+                        .setEmoji("🛒")
                         .setStyle(ButtonStyle.Success),
                     backButton(ownerId),
+                    closeButton(ownerId),
                 ),
             ],
         };
@@ -491,9 +547,11 @@ async function purchaseResult(ctx, interaction, ownerId, categoryKey, itemKey, q
                 new ActionRowBuilder().addComponents(
                     new ButtonBuilder()
                         .setCustomId(`market:itemback:${ownerId}:${categoryKey}`)
-                        .setLabel("← Back to section")
+                        .setLabel("Back")
+                        .setEmoji("⬅️")
                         .setStyle(ButtonStyle.Secondary),
                     backButton(ownerId),
+                    closeButton(ownerId),
                 ),
             ],
         };

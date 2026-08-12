@@ -14,6 +14,8 @@
  * database and no Discord connection.
  */
 
+import { ChannelSessions } from "./session-store.js";
+
 /** All of these are the legacy's own values. */
 export const GUESS_RULES = {
     DEFAULT_BET: 10,
@@ -230,54 +232,7 @@ export function compareGuess(value, target) {
  * in-memory sessions would mean a restart could take someone's coins and leave no game to
  * win them back, which is worse than the problem it solves.
  */
-export class GuessSessions {
-    constructor() {
-        this.games = new Map();
-        this.locks = new Map();
-    }
-
-    /**
-     * Run `fn` with exclusive access to one channel's game.
-     *
-     * ⚠️ This replaces the legacy's `guess_out_processing` — a single module-level boolean
-     * guarded by `for i in range(10): if processing: await asyncio.sleep(1)`. That was one
-     * mutex shared by EVERY channel, and it gave up after ten seconds. Two players clicking
-     * at the same instant could otherwise both read `attempts = 3`, both write 4, and both
-     * be told they won.
-     */
-    async withLock(channelId, fn) {
-        const previous = this.locks.get(channelId) ?? Promise.resolve();
-
-        let release;
-        const mine = new Promise((resolve) => {
-            release = resolve;
-        });
-
-        // ⚠️ Keep a reference to the CHAINED promise, which is what actually goes in the map.
-        // Comparing against `mine` instead never matched, so the map grew forever — caught by
-        // "the lock map does not grow forever" in test/unit/guess-rules.test.mjs.
-        const chained = previous.then(() => mine);
-        this.locks.set(channelId, chained);
-
-        await previous;
-        try {
-            return await fn();
-        } finally {
-            release();
-            // Only the last waiter clears the entry; if someone else has already queued
-            // behind us, the map still holds their link of the chain.
-            if (this.locks.get(channelId) === chained) this.locks.delete(channelId);
-        }
-    }
-
-    has(channelId) {
-        return this.games.has(String(channelId));
-    }
-
-    get(channelId) {
-        return this.games.get(String(channelId)) ?? null;
-    }
-
+export class GuessSessions extends ChannelSessions {
     start({ channelId, guildId, starterId, bet, target, startedAt = Date.now() }) {
         const key = String(channelId);
         if (this.games.has(key)) throw new Error(`a guess game is already running in ${key}`);
@@ -298,8 +253,7 @@ export class GuessSessions {
             messageId: null,
         };
 
-        this.games.set(key, game);
-        return game;
+        return this.set(key, game);
     }
 
     /** Record a guess and return the game plus what it means. Caller holds the lock. */
@@ -322,14 +276,6 @@ export class GuessSessions {
         };
     }
 
-    end(channelId) {
-        return this.games.delete(String(channelId));
-    }
-
-    /** Games past their 5 minutes — the sweeper's input. */
-    expired(now = Date.now()) {
-        return [...this.games.values()].filter((game) => game.expiresAt <= now);
-    }
 }
 
 function randomTarget() {
