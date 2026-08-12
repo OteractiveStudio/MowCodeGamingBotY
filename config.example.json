@@ -14,7 +14,13 @@
         "admin_ids": [],
         "default_lang": "en",
         "default_prefix": "+",
-        "high_roller_threshold": 100000
+        "high_roller_threshold": 100000,
+        "status_interval_seconds": 60,
+        "status_lines": [],
+        "avatar_file": ""
+    },
+    "translate": {
+        "enabled": true
     },
     "logging": {
         "message": {

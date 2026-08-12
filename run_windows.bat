@@ -65,10 +65,25 @@ if errorlevel 1 (
 echo.
 
 REM ---- go ----------------------------------------------------------------
+REM THIS SCRIPT IS THE SUPERVISOR.
+REM
+REM /admin restart does NOT restart the bot itself. The legacy did, with
+REM os.system("python MCGB_Launcher.py") from inside the running process -
+REM which blocks the dying parent on its own replacement and leaves it in the
+REM process tree. Instead the bot exits with code 42 to mean "start me again",
+REM and the loop below is what actually does it. Any other exit code stops.
+REM
+REM MCGB_SUPERVISED tells the bot something is watching. Without it,
+REM /admin restart refuses rather than exiting into nothing - a restart button
+REM that kills the bot for good is worse than no button.
+set MCGB_SUPERVISED=1
+set RESTARTS=0
+
 echo  Starting the bot. Press Ctrl+C to stop it.
 echo  ------------------------------------------------------------
 echo.
 
+:runloop
 REM node directly, NOT "npm start": npm runs the bot as a CHILD process, so
 REM stopping npm can leave the bot alive and still connected to Discord.
 REM Running in the foreground also means Ctrl+C reaches the bot itself, which
@@ -77,10 +92,30 @@ REM
 REM main.js records its own PID in logs\bot.pid and clears it on exit, so the
 REM check above and stop_windows.bat both know which process is ours.
 node main.js
+set EXITCODE=%errorlevel%
+
+if %EXITCODE%==42 (
+  set /a RESTARTS=%RESTARTS%+1
+  echo.
+  echo  ------------------------------------------------------------
+  echo  Restart requested ^(restart #%RESTARTS%^). Starting again...
+  echo  ------------------------------------------------------------
+  echo.
+  REM A brief pause so a restart loop caused by a boot failure cannot spin the
+  REM CPU. The bot only exits 42 on request, so this should never be hot - but
+  REM "should never" is not a reason to leave it unguarded.
+  powershell -NoProfile -Command "Start-Sleep -Seconds 2"
+  goto :runloop
+)
 
 echo.
 echo  ------------------------------------------------------------
-echo  The bot has stopped.
+if %EXITCODE%==0 (
+  echo  The bot has stopped.
+) else (
+  echo  The bot exited with code %EXITCODE%.
+  echo  Check the newest file in logs\ for what happened.
+)
 goto :done
 
 :failed

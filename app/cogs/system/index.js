@@ -12,6 +12,8 @@ import { Events, SlashCommandBuilder, ActivityType, EmbedBuilder } from "discord
 import { log } from "../../../lib/utility.js";
 import { guildLang } from "../../bot/locale.js";
 import { translator } from "../../../lib/i18n.js";
+import { startStatusRotation, checkAvatar } from "../../bot/presence.js";
+import { takeRestartNotice } from "../../bot/restart.js";
 
 export default {
     name: "system",
@@ -67,18 +69,53 @@ export default {
                     import.meta.url,
                 );
 
-                // The legacy cycled a status list. One honest status for now —
-                // cycling comes back when there is something worth cycling.
-                readyClient.user.setPresence({
-                    activities: [{ name: "/ping", type: ActivityType.Listening }],
-                    status: "online",
-                });
+                // ⭐ HIS ROTATING STATUS IS BACK, at a sane interval. See app/bot/presence.js
+                // for why 7 seconds became 60.
+                await startStatusRotation(readyClient, ctx.config);
 
-                void ctx;
+                // ⭐ And his avatar self-check — once, never retried, off unless configured.
+                const avatar = await checkAvatar(readyClient, ctx.config);
+                if (avatar !== "disabled") {
+                    await log(`avatar check: ${avatar}`, import.meta.url);
+                }
+
+                // ⭐ "I'm back! :D" — his set_starting_msg, delivered once.
+                await announceRestart(readyClient, ctx);
+
+                void ActivityType;
             },
         },
     ],
 };
+
+/**
+ * Say "I'm back!" in the channel the restart was asked for, if there is a notice.
+ *
+ * ⚠️ Every failure path is logged rather than swallowed, and none of them can stop the boot: the
+ * bot being up matters more than the greeting arriving.
+ */
+async function announceRestart(client, ctx) {
+    const notice = takeRestartNotice();
+    if (!notice?.channelId) return;
+
+    const s = translator(notice.lang);
+
+    try {
+        const channel = await client.channels.fetch(notice.channelId);
+        await channel.send(
+            notice.requestedBy
+                ? `${s("restart.back")} <@${notice.requestedBy}>`
+                : s("restart.back"),
+        );
+        await log(`restart notice delivered to channel ${notice.channelId}`, import.meta.url);
+    } catch (err) {
+        await log(
+            `could not deliver the restart notice to ${notice.channelId}: ${err.message}`,
+            "warning",
+            import.meta.url,
+        );
+    }
+}
 
 function formatUptime(totalSeconds) {
     const hours = Math.floor(totalSeconds / 3600);

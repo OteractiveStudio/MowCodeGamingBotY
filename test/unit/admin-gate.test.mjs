@@ -90,7 +90,7 @@ function fakeCtx({ admins, label }) {
     };
 }
 
-const SUBCOMMANDS = ["money", "player", "reset", "fish", "feedback", "stats", "cogs"];
+const SUBCOMMANDS = ["money", "player", "reset", "fish", "feedback", "stats", "cogs", "restart"];
 
 const command = adminCog.commands[0];
 

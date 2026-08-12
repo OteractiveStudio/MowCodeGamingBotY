@@ -37,6 +37,7 @@ import {
 } from "./lib/utility.js";
 import { initDB, closeDB } from "./database/index.js";
 import { startBot, stopBot } from "./app/bot/index.js";
+import { RESTART_EXIT_CODE, isRestartRequested } from "./app/bot/restart.js";
 
 /**
  * Where the run scripts look to tell OUR bot apart from any other Node process on the machine.
@@ -179,6 +180,14 @@ async function shutdown(signal) {
 
     const logPath = getLogPath();
     if (logPath) console.log(`Log for this run: ${logPath}`);
+
+    // ⚠️ Set AFTER the clean shutdown above, so a restart still closes the database and the
+    // gateway properly. An exit code is a request to whatever started us; if nothing is watching,
+    // the process simply stops — which is why /admin restart refuses when unsupervised.
+    if (isRestartRequested() && process.exitCode !== 1) {
+        console.log(`Exiting ${RESTART_EXIT_CODE} to ask for a restart.`);
+        process.exitCode = RESTART_EXIT_CODE;
+    }
 }
 
 for (const signal of ["SIGINT", "SIGTERM"]) {

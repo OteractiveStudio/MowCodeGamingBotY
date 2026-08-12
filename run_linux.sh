@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# MowCodeGamingBoteY — start the bot.
+# MowCodeGamingBoteY — start the bot, and restart it when it asks.
 #
 # The Windows twin of this is run_windows.bat, which is the one Ote actually uses;
 # this exists so the project is not Windows-only if it ever moves to a server.
-set -euo pipefail
+set -uo pipefail
 cd "$(dirname "$0")"
 
 echo "============================================================"
@@ -14,10 +14,9 @@ echo
 # ---- one bot at a time ------------------------------------------------------
 # Two builds running at once means Discord delivers each interaction to whichever
 # answers first, so buttons get handled by code that has never heard of them.
-running=$(pgrep -fc "node .*main\.js" || true)
-if [ "${running:-0}" -gt 0 ]; then
-  echo " [!] ${running} bot process(es) already running."
-  echo "     Stop them first, or you will have two bots answering the same server."
+if [ -f logs/bot.pid ] && kill -0 "$(cat logs/bot.pid)" 2>/dev/null; then
+  echo " [!] A bot from this folder is already running as PID $(cat logs/bot.pid)."
+  echo "     Stop it first, or you will have two bots answering the same server."
   read -r -p "     Start anyway? [y/N] " answer
   case "${answer}" in [yY]*) ;; *) exit 0 ;; esac
   echo
@@ -26,7 +25,7 @@ fi
 # ---- dependencies -----------------------------------------------------------
 if [ ! -d node_modules ]; then
   echo " Installing dependencies (first run)..."
-  npm install
+  npm install || exit 1
   echo
 fi
 
@@ -53,10 +52,47 @@ fi
 echo
 
 # ---- go ---------------------------------------------------------------------
+# THIS SCRIPT IS THE SUPERVISOR.
+#
+# /admin restart does NOT restart the bot itself. The legacy did, with
+# os.system("python MCGB_Launcher.py") from inside the running process, which
+# blocks the dying parent on its own replacement and leaves it in the process
+# tree. Instead the bot exits 42 to mean "start me again", and this loop does it.
+#
+# MCGB_SUPERVISED tells the bot something is watching. Without it, /admin restart
+# refuses rather than exiting into nothing.
+#
+# ⚠️ NOT `exec node main.js` any more — exec REPLACES this shell, so there would be
+# no loop left to do the restarting.
+export MCGB_SUPERVISED=1
+restarts=0
+
 echo " Starting the bot. Ctrl+C to stop it."
 echo " ------------------------------------------------------------"
 echo
 
-# node directly, NOT "npm start": npm runs the bot as a CHILD process, so stopping
-# npm can leave the bot alive and connected.
-exec node main.js
+while true; do
+  node main.js
+  code=$?
+
+  if [ "${code}" -ne 42 ]; then
+    echo
+    echo " ------------------------------------------------------------"
+    if [ "${code}" -eq 0 ]; then
+      echo " The bot has stopped."
+    else
+      echo " The bot exited with code ${code}."
+      echo " Check the newest file in logs/ for what happened."
+    fi
+    exit "${code}"
+  fi
+
+  restarts=$((restarts + 1))
+  echo
+  echo " ------------------------------------------------------------"
+  echo " Restart requested (restart #${restarts}). Starting again..."
+  echo " ------------------------------------------------------------"
+  echo
+  # A brief pause so a restart loop caused by a boot failure cannot spin the CPU.
+  sleep 2
+done

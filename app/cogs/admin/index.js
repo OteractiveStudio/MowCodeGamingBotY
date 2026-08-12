@@ -66,6 +66,10 @@ import { ensurePlayer, getPlayerWithState } from "../../data/player.js";
 import { addMoney, getState, toInt, expCap } from "../../data/economy.js";
 import { getInventory } from "../../data/inventory.js";
 import { feedbackTally, listFeedback, markAllRead } from "../../data/feedback.js";
+import { guildLang } from "../../bot/locale.js";
+import { translator } from "../../../lib/i18n.js";
+import { isSupervised, writeRestartNotice, requestRestart } from "../../bot/restart.js";
+import { setFixedPresence } from "../../bot/presence.js";
 
 const COIN = "🪙";
 
@@ -165,7 +169,12 @@ export default {
                         ),
                 )
                 .addSubcommand((sub) => sub.setName("stats").setDescription("Bot and database health."))
-                .addSubcommand((sub) => sub.setName("cogs").setDescription("What is loaded right now.")),
+                .addSubcommand((sub) => sub.setName("cogs").setDescription("What is loaded right now."))
+                .addSubcommand((sub) =>
+                    sub
+                        .setName("restart")
+                        .setDescription("Restart the bot. Only works if something is supervising it."),
+                ),
 
             /**
              * ⭐ EPHEMERAL AT DEFER TIME, WHICH IS THE ONLY TIME IT CAN BE DECIDED.
@@ -210,6 +219,7 @@ export default {
                 if (sub === "reset") return askReset(interaction, ctx);
                 if (sub === "fish") return setFish(interaction, ctx);
                 if (sub === "feedback") return showFeedback(interaction, ctx);
+                if (sub === "restart") return doRestart(interaction, ctx);
                 if (sub === "stats") return showStats(interaction, ctx);
                 return showCogs(interaction, ctx);
             },
@@ -830,6 +840,57 @@ async function showStats(interaction, ctx) {
     embed.setFooter({ text: `schema ${ctx.db.schema}` });
 
     await respond(interaction, { embeds: [embed] });
+}
+
+// ── restart ──────────────────────────────────────────────────────────────────
+
+/**
+ * His restart, with the countdown and the "I'm back!" — but asking to be restarted rather than
+ * spawning its own replacement. See `app/bot/restart.js` for why.
+ */
+async function doRestart(interaction, ctx) {
+    const s = translator(await guildLang(ctx, interaction.guildId));
+
+    // ⚠️ REFUSED UP FRONT when nothing is watching. Exiting would just kill the bot, and a
+    // "restart" button that stops the bot for good is worse than no button.
+    if (!isSupervised()) {
+        await respond(interaction, { content: s("restart.no_supervisor") });
+        await ctx.log(
+            `admin: ${interaction.user.id} asked for a restart but MCGB_SUPERVISED is not set — refused`,
+            "warning",
+            import.meta.url,
+        );
+        return;
+    }
+
+    // Where to say hello again. Recorded BEFORE anything is torn down.
+    writeRestartNotice({
+        channelId: interaction.channelId,
+        requestedBy: interaction.user.id,
+        lang: await guildLang(ctx, interaction.guildId),
+    });
+
+    // ⭐ His touches: stop rotating, show that it is going down, count down from five.
+    await setFixedPresence(ctx.client, "❗❗ Restarting... ❗❗");
+
+    await respond(interaction, { content: s("restart.countdown", { seconds: 5 }) });
+    for (let left = 4; left >= 1; left -= 1) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        await respond(interaction, { content: s("restart.countdown", { seconds: left }) });
+    }
+    await respond(interaction, { content: s("restart.now") });
+
+    await ctx.log(
+        `admin: ${interaction.user.id} requested a restart from channel ${interaction.channelId}`,
+        "warning",
+        import.meta.url,
+    );
+
+    // ⚠️ Flag first, then signal. The signal handler runs the normal clean shutdown — database
+    // and gateway closed in order — and only then reads this flag to choose the exit code. A
+    // process.exit() here would skip all of that.
+    requestRestart();
+    process.kill(process.pid, "SIGTERM");
 }
 
 // ── cogs ─────────────────────────────────────────────────────────────────────
