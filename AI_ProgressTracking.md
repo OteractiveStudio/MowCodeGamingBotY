@@ -538,3 +538,69 @@ let's just play)".
 - Next action: **wordle** — `BN_bot/data/wordle/words.txt` and `daily_word.json` need importing as reference
   data, which makes it the first game to need a migration since 004. Then **minesweeper** (self-contained
   generator, the oldest file in the tree at 2020, pre-Discord), then **admin commands**.
+
+## 2026-08-13 (later still) — wordle, which turned out to need finishing rather than porting
+
+Ote: *"you can go on, then skip minesweeper to Admin commands"* — so wordle, then admin commands, and
+**minesweeper is deliberately skipped**.
+
+- ⚠️ **TWO THINGS I HAD WRITTEN IN THE CARRY-ON WERE WRONG, and both are corrected rather than quietly
+  dropped.** It said wordle needed `words.txt` + `daily_word.json` "importing as reference data". **Both files
+  are ZERO BYTES** — created 2022-03-03 and never filled. There was nothing to import. And it implied wordle was
+  a working game to port: **it was never a Discord command at all.** `CsGamingBot.py` has
+  `wordle_target_rand`, `wordle_reset` and `wordle_broad` plus a complete help entry describing how to play, but
+  **no `@client.command()`** for it. The only runnable versions are `woodle2.py` and `wordle.py`, console
+  prototypes driven by `while True: input()`. So this was finishing the game, not porting it — which is why the
+  rules were pinned down carefully before writing any of it.
+- 🔑 **HIS WORD SOURCE WAS TWO THIRD-PARTY APIs, CALLED AT MODULE IMPORT.**
+  `requests.get("https://zenquotes.io/api/random")` for a random inspirational quote, split into words, one of
+  which seeded `requests.get(f"https://api.datamuse.com/words?ml={a}")` — a thesaurus lookup — then filtered to
+  4-6 letter lowercase alphabetic words. `wordle_reset()` is called at **module level (`:510`)**, so **starting
+  the bot made two outbound HTTP requests**, the game was unplayable without the internet, and
+  `wordle_target_rand` **recursed unboundedly** — two more requests per level — whenever the filters matched
+  nothing. `words.txt` was evidently meant to fix exactly this and never got filled. ⇒ New table
+  `mst_wordle_word` (migration **005**, the first since 004), **2,004 words** in
+  `database/seeds/wordle_words.js`, drawn with one `ORDER BY random() LIMIT 1`.
+- ⭐ **The word list is NEW and says so loudly**, because everything else seeded in this project is transcribed
+  from his data and this could not be. It validates itself at import: lowercase a-z only, 4-6 letters, length
+  column matching, duplicates dropped. **That validator caught 10 of my own mistakes** — seven-letter words
+  sitting in the six-letter array — which is the argument for having written it. It also catches the trap his
+  own filter could not: `isalpha() and islower()` is **true for Cyrillic**, so his version would happily have
+  made "виза" the answer to an English word game.
+- ⭐ **HIS RULES KEPT:** **4-6 letters, not 5** (`wordle_target_rand(4, 6)`, and the board is sized from
+  `len(target)` so the grid width varies per game); 6 attempts; 🟩/🟨/🟥 — ⚠️ note his **help text says gray**
+  while his code writes **red**, and the code wins because red is what his players saw; a **wrong-length guess
+  costs no attempt**; **guesses need not be real words** (his own prompt: *"Enter your guess word (could be
+  meaningless)"*, so there is deliberately no dictionary check); the answer is revealed on a loss, tone included
+  — *"The answer is {target} lol."*; his **A-M / N-Z keyboard tracker**, which was the best idea in the game;
+  and **no bet**, because `money_add` appears nowhere near his wordle and adding stakes would be inventing a
+  rule rather than porting one.
+- ⭐ **CREDIT WHERE DUE — his duplicate-letter handling was CORRECT** and is kept as written. Mark greens first,
+  blanking both the guess and target positions, then match the remainder one-for-one with a `break` so each
+  target letter is consumed exactly once. That is the part almost every homemade wordle gets wrong, and the
+  tests exist to stop a later "simplification" breaking it.
+- ✅ **Fixed:** (1) the two-API word source above; (2) 🔑 **the board was SIX ALIASES OF ONE ROW** —
+  `for i in range(6): ls.append(temp_ls)` appended the *same list object* six times, so writing one row wrote
+  all six, survivable only because each row was later replaced by a copy as it filled; (3) 🔑 **a short guess
+  crashed** — `wordle_out` called `lencheck()` and **ignored its return**, while `lencheck` itself recursed into
+  a whole new `wordle_out(on_msg())`, so when that returned the outer call carried on with the bad guess and
+  `guess[i]` raised IndexError; (4) `playing_wordle` was module-level, so one game bot-wide; (5) no timeout;
+  (6) **the keyboard was skipped on a winning guess** because the yellow/red pass sat inside
+  `if not correct:`; (7) dead state — `letter_corr`, `posi_corr`, `wordle_msg`, `wordle_channel` all written
+  and never read.
+- ⏭ **The daily word was never implemented either.** `daily_word.json` is empty and his code picks a fresh
+  random word per game, so there was nothing to port and it stays unbuilt rather than invented.
+- ⚠️ **One test of mine was wrong and the code was right.** I asserted that in "stone" vs "crane" the `n` scores
+  yellow; both words have `n` at index 3 and `e` at index 4, so both are **green**. Fixed the expectation and
+  added "nacre" as the genuine wrong-place case. Recording it because the failure looked like a scoring bug for
+  about a minute and was not.
+- **292 checks pass** (up from 267 — 25 new), 12 cogs, 16 commands, 12 tables. Verified end to end against the
+  real database: draws at every length 4/5/6 and an unconstrained draw all return sensible words, and a full
+  six-guess game plays to a solve. The column-parity check picked up the new table in both directions without
+  being told about it.
+- Next action: **admin commands**, per his instruction to skip minesweeper. `config.bot.admin_ids` and
+  `app/bot/permissions.js` already exist and are tested never to default open, so the gate is built. `/money
+  adjust` is the obvious first one, and `admin_adjust` is **already an allowed `log_economy` reason** from
+  migration 002 — so the ledger has been waiting for it since the beginning. His originals to draw on: a data
+  editor, a sandboxed file browser, cog reload/unload/list without restarting, and a restart command that
+  counted down, swapped the avatar, left voice cleanly and posted "I'm back!" on its next boot.

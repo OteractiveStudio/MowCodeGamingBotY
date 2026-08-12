@@ -27,6 +27,7 @@ import mstMarketListingModel from "./mst_market_listing.model.js";
 import mstFishModel from "./mst_fish.model.js";
 import txnPurchaseModel from "./txn_purchase.model.js";
 import logEconomyModel from "./log_economy.model.js";
+import mstWordleWordModel from "./mst_wordle_word.model.js";
 
 export default function initModels(sequelize, schemas) {
     /**
@@ -64,6 +65,7 @@ export default function initModels(sequelize, schemas) {
         mst_market_category: mstMarketCategoryModel(sequelize, DataTypes, schemas, choices, hooks),
         mst_market_listing: mstMarketListingModel(sequelize, DataTypes, schemas, choices, hooks),
         mst_fish: mstFishModel(sequelize, DataTypes, schemas, choices, hooks),
+        mst_wordle_word: mstWordleWordModel(sequelize, DataTypes, schemas, choices, hooks),
         txn_purchase: txnPurchaseModel(sequelize, DataTypes, schemas, choices, hooks),
         log_economy: logEconomyModel(sequelize, DataTypes, schemas, choices, hooks),
     };

@@ -37,14 +37,18 @@ try {
 
     console.log(
         `[seed] reference data loaded — ${counts.fish} fish · ${counts.items} items · ` +
-        `${counts.categories} market categories · ${counts.listings} listings`,
+        `${counts.categories} market categories · ${counts.listings} listings · ` +
+        `${counts.words} wordle words`,
     );
 
-    const [fishCount] = await db.sequelize.query(
-        `SELECT count(*)::int AS n FROM ${db.schema}.mst_fish`,
+    // Read the counts back from the database rather than trusting the loop — a seed that
+    // reports what it MEANT to write is not a verification.
+    const [back] = await db.sequelize.query(
+        `SELECT (SELECT count(*)::int FROM ${db.schema}.mst_fish) AS fish,
+                (SELECT count(*)::int FROM ${db.schema}.mst_wordle_word) AS words`,
         { type: db.sequelize.constructor.QueryTypes.SELECT },
     );
-    console.log(`[seed] mst_fish now holds ${fishCount.n} row(s)`);
+    console.log(`[seed] mst_fish now holds ${back.fish} row(s), mst_wordle_word ${back.words}`);
 
     process.exitCode = 0;
 } catch (err) {

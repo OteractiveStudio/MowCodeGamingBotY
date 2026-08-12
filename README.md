@@ -35,6 +35,7 @@ whole-file read-modify-write      →   one atomic statement per mutation
 | `/coinflip` | Call heads or tails — **type `h`, `head`, `หัว`…** — for up to half your coins |
 | `/dice` | Roll a die. `even`/`odd`/`high`/`low` pays 1:1, calling the exact face pays **×3** |
 | `/blackjack` · `/bj` | Blackjack against the dealer — buttons for hit, stand, double down, surrender |
+| `/wordle start` · `board` · `rules` | Guess the hidden word — **type guesses in chat**, 4-6 letters, 6 tries |
 | `/ping` · `/about` | Liveness, and the credits |
 
 **The core loop works**: buy rods → fish → earn coins and exp → level up → buy more. On the original's rules,
@@ -100,7 +101,7 @@ you stuck in it. The menu is public and anyone may click it; a click that is not
 "this isn't yours", which is what the original's reaction handler did minus the reaction it had to remove
 afterwards. The whole navigation state lives in the button ids, so **there is no session state to strand**.
 
-### Built: six games
+### Built: seven games
 
 **Guess the number.** Bet 10–1000, **seven attempts shared by the whole channel**, five minutes. Solve it on
 the first try for **×5** the bet, within three for **×2**, within five for **×1.5**, on the sixth for **×0.5**,
@@ -188,10 +189,33 @@ on 16** where every real blackjack dealer stands on 17. That second one is proba
 than a design choice, but it changes the house edge, so it is one named constant and the owner's call — not
 something to correct on the way past.
 
+**Wordle.** A hidden word of **4 to 6 letters** — not the usual 5 — and six guesses, with 🟩 for the right
+letter in the right place, 🟨 for the right letter elsewhere and 🟥 for a letter that is not in the word. Under
+the board sits the original's nicest idea: a **letter tracker** across two rows, A–M and N–Z, each letter
+carrying its best-known state. **Anyone in the channel can guess, by typing** — a wrong-length guess costs you
+nothing, and guesses **do not have to be real words**, because the original's own prompt said "could be
+meaningless". Free to play; the original had no stake on it either.
+
+This one was less a port than a finishing job: **the original's wordle was never actually a working Discord
+command.** The monolith has the helper functions and a complete help entry, but no command ever called them —
+the only runnable versions are console prototypes driven by `input()`.
+
+And it had no word list. `words.txt` and `daily_word.json` exist in the original and are both **zero bytes**,
+created in March 2022 and never filled. The real source was two third-party web APIs chained together — a
+random inspirational quote from one, fed as a seed into a thesaurus lookup on the other — and the call sat at
+**module import time**, so simply starting the bot made two outbound HTTP requests, and the word picker
+recursed without a bound whenever its filters matched nothing. A game word is not worth an external dependency,
+let alone one that can stop the bot booting, so this repo ships its own **2,004-word list**.
+
+Credit where it is due, though: the original's **duplicate-letter handling was correct**, which is the part most
+homemade wordles get wrong. Greens are marked first and blank out both sides, then remaining letters match
+one-for-one — so guessing a word with three E's against a target holding one marks exactly one. That algorithm
+is kept as it was written.
+
 ### Still to port
 
-**Wordle** with a daily word · a **minesweeper** generator (the oldest file in the original, from 2020,
-written before any of it was a Discord bot).
+A **minesweeper** generator — the oldest file in the original, from 2020, written before any of it was a
+Discord bot.
 
 **Admin tools from inside Discord.** Reload/unload/list cogs without restarting · a restart command that
 counted down, swapped the avatar, left voice cleanly and posted "I'm back!" on its next boot · a data editor ·
@@ -257,8 +281,8 @@ That is what a database fixes, and it is the actual point of this project.
 
 **It is live and being played.** The bot runs in a real server on a real database.
 
-✅ Economy, progression, fishing, market and inventory — all on the original's numbers · ✅ **six games**:
-guess, OX, stealing, coinflip, dice and blackjack · ✅ a ledger that reconciles · ✅ **267 tests** against the real database, one command,
+✅ Economy, progression, fishing, market and inventory — all on the original's numbers · ✅ **seven games**:
+guess, OX, stealing, coinflip, dice, blackjack and wordle · ✅ a ledger that reconciles · ✅ **292 tests** against the real database, one command,
 real exit code.
 
 **The economy starts from zero.** All 24 original players were imported, then deliberately removed: looking at
@@ -266,7 +290,7 @@ the real numbers side by side, the balances were not worth carrying forward — 
 rewrite had already reset 12 of those players to the starting 200 anyway. Everyone is provisioned fresh on
 their first command. The game content — fish, items, market listings — is seeded from the repo and unaffected.
 
-❌ **Still to port:** wordle, minesweeper · admin commands (`data` editor, `file`
+❌ **Still to port:** minesweeper · admin commands (`data` editor, `file`
 explorer, `restart`) · i18n · selling items back · prefix commands.
 
 The full ❌ list, and every decision behind the design, lives in [`AI_CarryOn.md`](AI_CarryOn.md).
@@ -278,7 +302,7 @@ npm install
 cp config.example.json config.json     # then fill it in — see below
 npm run db:migrate                     # create the schema (idempotent, safe to re-run)
 npm run db:seed                        # load the fish, items and market (also idempotent)
-npm test                               # 267 checks, real exit code
+npm test                               # 292 checks, real exit code
 npm run bot:register                   # publish slash commands to Discord
 node main.js                           # NOT npm start — see below
 ```
@@ -319,12 +343,13 @@ app/
     coinflip/               /coinflip                     (typed call + autocomplete)
     dice/                   /dice                         (typed call + autocomplete)
     blackjack/              /blackjack, /bj
+    wordle/                 /wordle start | board | rules  (+ typed guesses)
     guild/                  /server, and join/leave provisioning
     system/                 /ping, /about
   data/                     the only code that reads or writes rows
     economy.js              the cascade, the locking, and the ledger
     fishing.js  inventory.js  guess.js  ox.js  steal.js  coinflip.js  dice.js
-    blackjack.js
+    blackjack.js  wordle.js
     session-store.js        one game per channel, with a per-channel lock
     player.js  guild.js
 

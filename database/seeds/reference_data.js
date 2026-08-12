@@ -18,6 +18,8 @@
  * `display_name` values are humanised from the keys — the legacy had no such field.
  */
 
+import { WORDLE_WORDS } from "./wordle_words.js";
+
 /** Draw weight is `10 - tier`, so a LOWER tier is MORE common. */
 export const FISH = [
     { fish_key: "Nothing", display_name: "Nothing", file_name: "Nothing.png", fish_type: "not_creature", price: 0, tier: 0 },
@@ -76,7 +78,7 @@ export const MARKET_LISTINGS = [
  * and purchase history stays readable.
  */
 export async function seedReferenceData(db) {
-    const counts = { fish: 0, items: 0, categories: 0, listings: 0 };
+    const counts = { fish: 0, items: 0, categories: 0, listings: 0, words: 0 };
 
     await db.sequelize.transaction(async (transaction) => {
         for (const fish of FISH) {
@@ -96,6 +98,16 @@ export async function seedReferenceData(db) {
             await db.mst_market_listing.upsert(listing, { transaction });
             counts.listings += 1;
         }
+
+        // ⭐ The wordle dictionary. Unlike everything above it is NOT transcribed from the
+        // legacy — his words.txt is zero bytes and the real source was two third-party HTTP
+        // APIs. See wordle_words.js. Bulk-inserted rather than upserted one at a time: 2,000
+        // individual upserts is 2,000 round trips for data that never changes.
+        await db.mst_wordle_word.bulkCreate(WORDLE_WORDS, {
+            transaction,
+            updateOnDuplicate: ["length", "is_answer", "is_active", "updated_at"],
+        });
+        counts.words = WORDLE_WORDS.length;
     });
 
     return counts;

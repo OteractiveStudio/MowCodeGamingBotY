@@ -9,8 +9,8 @@
 
 ## ▶▶ START HERE
 
-**The bot is LIVE in Ote's server, the game loop works, and SIX games are playable.**
-11 cogs · **15 commands** · 11 tables · **267 tests** · 29 commits on `main`.
+**The bot is LIVE in Ote's server, the game loop works, and SEVEN games are playable.**
+12 cogs · **16 commands** · 12 tables · **292 tests** · 30 commits on `main`.
 ⛔ **`mst_player` is EMPTY — the economy was deliberately started over on 2026-08-13.** See DECIDED.
 
 🔑 **RUN IT WITH `run_windows.bat`** (or `node main.js`), **NEVER `npm start`** — see TRAPS #9. npm runs the
@@ -22,9 +22,9 @@ how the run script tells our bot apart from any other Node process on the machin
 ```bash
 npm install
 cp config.example.json config.json    # token + DB password go here; gitignored
-npm run db:migrate                    # 001-004 — idempotent
-npm run db:seed                       # fish, items, market — idempotent
-npm test                              # 267 checks, real exit code
+npm run db:migrate                    # 001-005 — idempotent
+npm run db:seed                       # fish, items, market, 2004 wordle words — idempotent
+npm test                              # 292 checks, real exit code
 npm run bot:register                  # ONLY after changing a SlashCommandBuilder
 run_windows.bat                       # or: node main.js  (NEVER npm start)
 ```
@@ -39,13 +39,14 @@ Ote's instruction. Its token is in `config.json` via `DevTools/maintenance/use-l
 |---|---|
 | ✅ **Live** | Logged in as `MowCodeGamingBot#1501`, 10 guilds. Commands invoked by Ote for real. |
 | ✅ **Stack** | JS ESM · discord.js **14.27** · pg · Sequelize 6 · Node 24. **No Fastify** (removed). |
-| ✅ **Database** | `discord_app` on `127.0.0.1:54322`, schema **`mowcodegamingbot_y`**, applied as the app role (not a superuser). **11 tables.** |
+| ✅ **Database** | `discord_app` on `127.0.0.1:54322`, schema **`mowcodegamingbot_y`**, applied as the app role (not a superuser). **12 tables.** |
 | ✅ **Economy** | Coins, exp, level, crystals. Cascade is pure + unit-tested. Every mutation writes `log_economy` **in the same transaction**. 🔑 Measured: legacy read-modify-write lost **147 of 150** coins under 50 concurrent credits; this loses **0**. |
 | ✅ **Fishing** | Weighted draw (`10 - tier`), 9 fish, 66 total weight. `auto` = 30 rods in **ONE transaction**. **His animation is restored**, with his own `rod_left < 21` throttle. |
 | ✅ **Market** | **Public click-through**: full contents visible, direct buttons per section and item, quantity buttons, modal for a custom amount, **Close** button. Owner-gated — anyone may click, non-owners get a private rejection. |
-| ✅ **Games (6)** | `/guess` — **type a bare number in chat**, his original UX. The Guess button and its modal were REMOVED at his request; `/guess try` survives as the guaranteed path. Cancel = **starter or a config bot admin**. `/ox` — 3×3 **button grid** labelled 1–9, vs bot or duel, give-up settles as a loss. |
+| ✅ **Games (7)** | `/guess` — **type a bare number in chat**, his original UX. The Guess button and its modal were REMOVED at his request; `/guess try` survives as the guaranteed path. Cancel = **starter or a config bot admin**. `/ox` — 3×3 **button grid** labelled 1–9, vs bot or duel, give-up settles as a loss. |
 | ✅ **Coinflip + dice** | `/coinflip` — call a side for 3..half your money (default = half; min 6 to play, a **derived** limit). `/dice` — 2..1000, default 10; even/odd/high/low 1:1, **exact face ×3 as profit** (so 4× in hand); high is `>3`; **his 5-frame animation restored**. ⭐ Both take the call as **TYPED FREE TEXT with his alias table** (`h`/`head`/`หัว`, `e`/`even`/`คู่`, bare `1`-`6`), NOT a dropdown — *"plain chat better ux"*. Autocomplete hints, does not gate. |
 | ✅ **Blackjack** | `/blackjack` + `/bj` (his `bj`/`Bj`/`BJ` trio collapsed — slash names are lowercase). Buttons replace typed `h`/`s`/`dd`/`sd`/`in`. **Hands are PUBLIC** — ⚠️ an earlier carry-on note claimed it needed ephemeral hands "so players cannot see each other's cards"; **that was wrong**, his blackjack is one player vs the dealer, so only the hole card hides. 🔑 **His version had 10 real defects — see `app/data/blackjack.js`'s header, all FIXED and numbered.** Measured after the fix: **4.73% naturals** (theory 4.83%) and a **−0.92% house edge** over 20,000 simulated hands, which his 13-card deck made impossible. |
+| ✅ **Wordle** | `/wordle start` · `board` · `rules`. **Type guesses in chat**, anyone in the channel may play. 🔑 **His wordle was NEVER a working Discord command** — the monolith has the helpers and a full help entry but no `@client.command()`; `woodle2.py` is a `while True: input()` console prototype. So this was finishing it, not porting it. ⭐ His rules kept: **4-6 letters (NOT 5)**, 6 attempts, 🟩/🟨/🟥, his **A-M / N-Z keyboard tracker**, wrong length costs no attempt, **guesses need not be real words**, answer revealed on a loss, and **no bet** (his had none). 🔑 **His word source was `zenquotes.io` → `api.datamuse.com`, called at MODULE IMPORT** — so booting the bot made two HTTP calls and recursed unboundedly on no match. `words.txt` was meant to fix that and is **ZERO BYTES**. Now `mst_wordle_word`, **2,004 words** seeded from the repo. |
 | ⚖️ **The high-roller brake is PORTED** | Above `bot.high_roller_threshold` (default **100000**, `>` so it starts at 100,001) the coin appends **the opposite of the player's own call** — win odds 1/2 → **1/3**, EV **−bet/3**. Biased against the *player*, not a side; re-read every flip so **1-2 max-bet losses switch it off** (a soft ceiling). ⭐ Ote: *"yeah it was my an anti-inflation thing"*. **VISIBLE** (own embed field, before the result) and **LOGGED** at `warning` + ledger `ref` suffix `:highroller`, both at his request. Set the config key to `null` to disable. |
 | ✅ **Stealing** | `/steal` + `/crime`. **The five prop items finally work**, and the mechanic came from his own item text: passkey=steal 35% · knife=rob 50% · gun=rob 70% · cat defends steal −30% · dog defends both −50%. Tool is **consumed** either way; 10-min cooldown on `last_steal_at`; up to a third of theirs, a third of yours as bail. Crime pays **no exp**. |
 | ✅ **Bot admins** | `config.bot.admin_ids` — his legacy `admin_list` ids, moved out of player rows (where `reset_player` could wipe them) into config. `app/bot/permissions.js`, tested to never default open. |
@@ -55,7 +56,8 @@ Ote's instruction. Its token is in `config.json` via `DevTools/maintenance/use-l
 
 ## ❌ What does NOT exist
 
-- ❌ **wordle, minesweeper.** `guess`, `ox`, `steal`, `coinflip`, `dice` and `blackjack` are what exist.
+- ❌ **minesweeper.** ⏭ **SKIPPED at Ote's instruction** — *"then skip minesweeper to Admin commands"*. Everything else
+  is built: `guess`, `ox`, `steal`, `coinflip`, `dice`, `blackjack`, `wordle`.
 - ❌ **Admin COMMANDS.** `admin_ids` exists and gates game cancellation, but there is no `/money` adjust,
   no `data` editor, no `file` explorer, no `restart`.
 - ❌ **Selling items back.** Buying only — the legacy had no sell either.
@@ -205,8 +207,18 @@ Ote's instruction. Its token is in `config.json` via `DevTools/maintenance/use-l
    sit down / min bet 10 / max bet half, natural ×1.5 truncated, surrender half, double ±2×, and
    **`DEALER_STANDS_ON: 16`** — real blackjack stands on 17, so it is very likely a misremembering, but it is
    a house-edge change and it is his to make. One constant.
-3. **wordle** — `BN_bot/data/wordle/words.txt` + `daily_word.json` need importing as reference data.
-4. **minesweeper** — self-contained generator, the oldest file in the tree (2020, pre-Discord).
+3. ✅ **DONE — wordle.** ⚠️ And the note that used to sit here was WRONG: it said `words.txt` and
+   `daily_word.json` "need importing as reference data". **Both files are ZERO BYTES**, created
+   2022-03-03 and never filled — there was nothing to import. His actual word source was
+   `zenquotes.io/api/random` feeding `api.datamuse.com/words?ml=…`, called at **module import
+   time**, so starting the bot made two external HTTP requests and `wordle_target_rand` recursed
+   unboundedly whenever the filters matched nothing. A **new 2,004-word list** now ships in
+   `database/seeds/wordle_words.js` → `mst_wordle_word` (migration 005). ⏭ **The daily word was
+   never implemented** either — `daily_word.json` is empty and his code picks a fresh random word
+   per game — so there was nothing to port there and it stays unbuilt.
+4. ⏭ **SKIPPED — minesweeper.** Ote, 2026-08-13: *"then skip minesweeper to Admin commands"*.
+   Still there if wanted: a self-contained generator, the oldest file in the tree (2020, written
+   before any of it was a Discord bot).
 5. **Admin commands** — `admin_ids` already exists; `/money adjust` is the obvious first one.
 
 ## 🧰 DevTools (workspace root, outside this repo, ungitted)
