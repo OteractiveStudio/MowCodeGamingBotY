@@ -370,10 +370,16 @@ async function cancelGame(interaction, ctx) {
         flags: MessageFlags.Ephemeral,
     });
 
+    // ⚠️ Ote saw "A moderator cancelled the game" on his OWN game and could not tell who had done
+    // it — *"wait what. is this you? or is it any user can cancel it?"*. It was neither: someone
+    // else in the channel with Manage Messages clicked Cancel. The rule is his (starter, admin or
+    // bot manager), but a cancellation that does not say WHO is unaccountable, so it names them now.
     await finishGame(
         interaction.channel,
         ctx,
         isStarter ? OUTCOME.CANCELLED_BY_STARTER : OUTCOME.CANCELLED_BY_MODERATOR,
+        null,
+        interaction.user.id,
     );
 }
 
@@ -510,7 +516,7 @@ async function updateBoard(channel, game, options) {
  * End a game and pay everyone, once. Settlement is computed by the pure `settle()` and
  * applied inside ONE transaction, so a game either pays everybody or nobody.
  */
-async function finishGame(channel, ctx, outcome, winnerId = null) {
+async function finishGame(channel, ctx, outcome, winnerId = null, byId = null) {
     const channelId = channel.id;
 
     const game = await sessions.withLock(channelId, async () => {
@@ -557,7 +563,11 @@ async function finishGame(channel, ctx, outcome, winnerId = null) {
     } else if (outcome === OUTCOME.CANCELLED_BY_STARTER) {
         lines.push(`<@${game.starterId}> cancelled the game and forfeits the bet.`);
     } else {
-        lines.push("A moderator cancelled the game. Nobody paid anything.");
+        lines.push(
+            byId
+                ? `<@${byId}> cancelled the game as a moderator. Nobody paid anything.`
+                : "A moderator cancelled the game. Nobody paid anything.",
+        );
     }
 
     for (const movement of movements) {
@@ -572,8 +582,8 @@ async function finishGame(channel, ctx, outcome, winnerId = null) {
     });
 
     await ctx.log(
-        `guess game in ${channelId} ended (${outcome}), target ${game.target}, ` +
-        `${game.attempts} attempt(s), ${movements.length} money movement(s)`,
+        `guess game in ${channelId} ended (${outcome}${byId ? ` by ${byId}` : ""}), ` +
+        `target ${game.target}, ${game.attempts} attempt(s), ${movements.length} money movement(s)`,
         import.meta.url,
     );
 }

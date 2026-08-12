@@ -52,6 +52,10 @@ export default (sequelize, DataTypes, schemas) =>
                 defaultValue: 1,
                 comment: "How many distinct item types the player may hold",
             },
+            last_steal_at: {
+                type: DataTypes.DATE,
+                comment: "Last steal ATTEMPT, success or not — the cooldown is measured from here",
+            },
             fishing_count: {
                 type: DataTypes.INTEGER,
                 allowNull: false,
