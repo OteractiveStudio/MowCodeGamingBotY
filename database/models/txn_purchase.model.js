@@ -55,6 +55,8 @@ export default (sequelize, DataTypes, schemas) =>
         {
             tableName: "txn_purchase",
             schema: schemas.project,
-            timestamps: false,
+            // created_at / updated_at added by 003. `purchased_on` stays as the domain time.
+            timestamps: true,
+            underscored: true,
         },
     );

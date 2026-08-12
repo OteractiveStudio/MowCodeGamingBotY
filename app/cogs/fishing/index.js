@@ -147,7 +147,7 @@ async function castEverything(interaction, ctx) {
     if (result.outOfRods) {
         await interaction.editReply(
             `${interaction.user}, **you have no fishing rods left.** ` +
-            `Buy some with \`/market buy item:Fishing rod\`.`,
+            `Buy some with \`/market\` → **Tool** → **Fishing rod**.`,
         );
         return;
     }

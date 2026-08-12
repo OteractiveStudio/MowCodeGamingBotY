@@ -28,7 +28,7 @@ whole-file read-modify-write      →   one atomic statement per mutation
 | `/fishing cast` | Cast once. Weighted draw, rod consumed, catch auto-sold |
 | `/fishing auto` | Burn every rod you have, up to 30, **in one transaction** |
 | `/fishing rates` | What is in the sea and how likely each one is |
-| `/market browse` | Everything for sale, by category |
+| `/market` | Everything for sale, by category |
 | `/market buy` | Buy something — with autocomplete |
 | `/inventory` | What you are carrying, and your slots |
 | `/money balance` | Your coins, level, exp toward the next level, crystals, rods, catches |

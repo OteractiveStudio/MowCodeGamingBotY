@@ -92,6 +92,9 @@ export default (sequelize, DataTypes, schemas, choices) =>
         {
             tableName: "log_economy",
             schema: schemas.project,
-            timestamps: false,
+            // created_at / updated_at added by 003. `occurred_on` stays: imported history has
+            // an occurred_on from years ago and a created_at from the import.
+            timestamps: true,
+            underscored: true,
         },
     );

@@ -53,6 +53,9 @@ export default (sequelize, DataTypes, schemas, choices) =>
         {
             tableName: "log_message",
             schema: schemas.project,
-            timestamps: false,
+            // created_at / updated_at added by 003. `report_on` stays: it is when the line was
+            // logged, which is not the same as when the row was written.
+            timestamps: true,
+            underscored: true,
         },
     );

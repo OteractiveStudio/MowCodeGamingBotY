@@ -35,8 +35,9 @@ export default (sequelize, DataTypes, schemas) =>
         {
             tableName: "mst_player_item",
             schema: schemas.project,
+            // created_at added by 003, so the `createdAt: false` exception this used to carry
+            // is gone — every model is plain `timestamps: true` now.
             timestamps: true,
             underscored: true,
-            createdAt: false, // acquired_at plays that role, with a clearer name
         },
     );

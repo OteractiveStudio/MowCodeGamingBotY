@@ -54,63 +54,16 @@ export default {
 
     commands: [
         {
+            // ⚠️ Ote: *"make it just /market"*. Discord does NOT allow a command to have both a
+            // bare form and subcommands — if there are subcommands, one must always be chosen.
+            // So `/market` is now the menu with no subcommand at all, and the type-it-yourself
+            // fast path moved to its own top-level `/buy` below.
             data: new SlashCommandBuilder()
                 .setName("market")
-                .setDescription("The market.")
-                .addSubcommand((sub) =>
-                    sub.setName("browse").setDescription("Open the market menu in this channel."),
-                )
-                .addSubcommand((sub) =>
-                    sub
-                        .setName("buy")
-                        .setDescription("Buy something directly, if you know what you want.")
-                        .addStringOption((option) =>
-                            option
-                                .setName("item")
-                                .setDescription("What to buy.")
-                                .setRequired(true)
-                                .setAutocomplete(true),
-                        )
-                        .addIntegerOption((option) =>
-                            option
-                                .setName("amount")
-                                .setDescription("How many. Defaults to 1.")
-                                .setMinValue(1),
-                        ),
-                ),
-
-            async autocomplete(interaction, ctx) {
-                const typed = interaction.options.getFocused().toLowerCase();
-                const categories = await getMarket(ctx.db);
-
-                const seen = new Map();
-                for (const category of categories) {
-                    for (const item of category.items) {
-                        // fishingrod is listed twice; suggest it once, at its price.
-                        if (!seen.has(item.item_key)) seen.set(item.item_key, item);
-                    }
-                }
-
-                const matches = [...seen.values()]
-                    .filter(
-                        (item) =>
-                            item.item_key.includes(typed) ||
-                            item.display_name.toLowerCase().includes(typed),
-                    )
-                    .slice(0, 25)
-                    .map((item) => ({
-                        name: `${item.display_name} — ${item.price} coins`,
-                        value: item.item_key,
-                    }));
-
-                await interaction.respond(matches);
-            },
+                .setDescription("Open the market."),
 
             async execute(interaction, ctx) {
-                const subcommand = interaction.options.getSubcommand();
-                if (subcommand === "browse") return browse(interaction, ctx);
-                if (subcommand === "buy") return purchase(interaction, ctx);
-                await interaction.reply(`Unknown subcommand \`${subcommand}\`.`);
+                return browse(interaction, ctx);
             },
         },
         {
@@ -137,7 +90,7 @@ export default {
                 if (items.length === 0) {
                     embed.addFields({
                         name: "items",
-                        value: "_Nothing yet. `/market browse` to see what is for sale._",
+                        value: "_Nothing yet. `/market` to see what is for sale._",
                     });
                 } else {
                     embed.addFields({
@@ -175,7 +128,7 @@ export default {
         if (ownerId && interaction.user.id !== ownerId) {
             await interaction.reply({
                 content:
-                    `This market belongs to <@${ownerId}>. Run \`/market browse\` and you get your own — ` +
+                    `This market belongs to <@${ownerId}>. Run \`/market\` and you get your own — ` +
                     `everyone can watch either way.`,
                 flags: MessageFlags.Ephemeral,
             });
@@ -555,39 +508,6 @@ async function purchaseResult(ctx, interaction, ownerId, categoryKey, itemKey, q
                 ),
             ],
         };
-    }
-}
-
-/** The fast path for people who already know what they want. */
-async function purchase(interaction, ctx) {
-    const itemKey = interaction.options.getString("item");
-    const amount = interaction.options.getInteger("amount") ?? 1;
-
-    await ensurePlayer(ctx.db, interaction.user);
-
-    try {
-        const result = await buy(ctx.db, {
-            discordId: interaction.user.id,
-            itemKey,
-            quantity: amount,
-            guildId: interaction.guildId,
-        });
-
-        const effect =
-            result.effect.kind === "rods"
-                ? `🎣 rods: \`${result.effect.from}\` → \`${result.effect.to}\``
-                : result.effect.kind === "inventory_size"
-                  ? `🎒 slots: \`${result.effect.from}\` → \`${result.effect.to}\``
-                  : `held: \`${result.effect.from}\` → \`${result.effect.to}\``;
-
-        await interaction.reply(
-            `Bought \`${result.quantity}×\` **${result.displayName}** for ${COIN} ` +
-            `\`${result.totalPrice}\`.\n${effect} · balance ${COIN} \`${result.money}\``,
-        );
-    } catch (err) {
-        if (!(err instanceof PurchaseError)) throw err;
-        // Same wording as the click-through market — one place, two entry points.
-        await interaction.reply(refusalMessage(err));
     }
 }
 
