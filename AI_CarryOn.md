@@ -10,7 +10,7 @@
 ## ▶▶ START HERE
 
 **The bot is LIVE in Ote's server, the game loop works, and SIX games are playable.**
-11 cogs · **15 commands** · 11 tables · **267 tests** · 28 commits on `main`.
+11 cogs · **15 commands** · 11 tables · **267 tests** · 29 commits on `main`.
 ⛔ **`mst_player` is EMPTY — the economy was deliberately started over on 2026-08-13.** See DECIDED.
 
 🔑 **RUN IT WITH `run_windows.bat`** (or `node main.js`), **NEVER `npm start`** — see TRAPS #9. npm runs the
