@@ -203,8 +203,13 @@ That is what a database fixes, and it is the actual point of this project.
 **It is live and being played.** The bot runs in a real server on a real database.
 
 ✅ Economy, progression, fishing, market and inventory — all on the original's numbers · ✅ **three games**:
-guess, OX and stealing · ✅ a ledger that reconciles · ✅ all **24 original players imported**, balances and
-levels intact · ✅ **199 tests** against the real database, one command, real exit code.
+guess, OX and stealing · ✅ a ledger that reconciles · ✅ **199 tests** against the real database, one command,
+real exit code.
+
+**The economy starts from zero.** All 24 original players were imported, then deliberately removed: looking at
+the real numbers side by side, the balances were not worth carrying forward — and the original's *own* 2024
+rewrite had already reset 12 of those players to the starting 200 anyway. Everyone is provisioned fresh on
+their first command. The game content — fish, items, market listings — is seeded from the repo and unaffected.
 
 ❌ **Still to port:** blackjack, coinflip, dice, wordle, minesweeper · admin commands (`data` editor, `file`
 explorer, `restart`) · i18n · selling items back · prefix commands.

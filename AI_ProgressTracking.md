@@ -341,3 +341,65 @@ The work that came *before* this project is workspace-level and lives in
   unimported — `/whoami` provisioned him fresh before the import, and `/whoami` has since been deleted. His
   legacy figures: 925 coins, level 23, 131 catches, dog×1, recoverable with
   `import-legacy-players.mjs --yes --overwrite`.
+
+## 2026-08-13 — the legacy economy is retired, and the coinflip rig is answered
+
+- **Coinflip's rigged branch is resolved and will be left OUT** — the question that had been open since two
+  sessions ago. Ote asked for detail, so here it is in full.
+  [`CsGamingBot.py:1271-1279`](../Reference/repos/MyBot_Legacy/Gaming%20Bot/CsGamingBot.py) builds
+  `ht_chance = ["Head","Tail"]` and then, **only if `player_money > 100000`**, appends *the opposite of what
+  the player just guessed*. So the list becomes 3 long with 2 entries on the side they did not pick, and the
+  win chance drops **1/2 → 1/3**. The important subtlety: **the coin is not biased toward a side, it is biased
+  against the player**, rebuilt from their own guess on every flip — two rich players flipping in the same
+  second get differently-weighted coins. Payout is 1:1 with no rake, so EV goes from **0** (perfectly fair,
+  the only game with zero house edge) to **−bet/3**. It bites hard because the default bet *is* half your
+  money and the maximum bet is *also* half your money — for a rich player the default and the ceiling are the
+  same number, so `\coinflip h` at 200,000 coins stakes 100,000 at 1/3 odds. But it **switches itself off**:
+  `player_money` is re-read at the top of every invocation, and since a max-bet loss roughly halves you, one
+  or two losses drop you back under the threshold. That makes it a **soft ceiling that pushes you back down**,
+  not a grinder that punishes being rich — which is the strongest argument it was deliberate anti-inflation
+  rather than a joke. Off-by-one for the record: it is `> 100000`, so the real threshold is 100,001.
+  🔑 **And it never once executed.** Richest balance in the final save is **1,401** (`emanresu`); richest in
+  the older CsGamingBot text save is **54,217** (`Kibou`) — **54% of the threshold at best**, and 71× short in
+  the save the database was built from. Leaving it out changes nothing that ever actually happened. Kept as a
+  documented anti-inflation lever because the new economy *could* reach 100k (`AmogusTheFish` pays 100 a
+  catch, uncapped) — and if it is ever wanted it must be a **visible** rule, since a rig players cannot see
+  erodes trust in an economy.
+- 📌 **Found a SECOND legacy save, from an earlier era — and it proves Ote already did this once.**
+  `Reference/repos/MyBot_Legacy/data_username.txt` + `data_economy.txt` + `data_fishing_rod.txt`: **28
+  players**, last written 2022-09-06, the CsGamingBot store before the move to JSON — parallel line-indexed
+  text files, one line per user with the balance at the same index. **14 of its ids appear in no other save.**
+  ⚠️ It is **not** a backup of the JSON. Of the 14 players present in both, **12 were reset to ~200** by the
+  JSON; `Kibou` went **54,217 → 200**. So **his own 2023/24 rewrite already started the economy over**. It
+  also carries **negative balances** (−1,077 and −228) and **negative rod counts** (−1) — artefacts of exactly
+  the unguarded arithmetic this project replaced. Recorded as TRAPS #13; treat it as an archive.
+- ⛔ **The economy started over.** Shown the real numbers, Ote decided: *"ok, as i see the real data. i think i
+  would be to start over. no need to port them no more"*, and chose **wipe players, keep reference data** over
+  keeping them or a full re-seed. Built `DevTools/maintenance/reset-players.mjs` and ran it: **24 players, 24
+  state rows, 3 item rows, 3 purchases and 78 ledger rows deleted; 9 fish, 8 items, 9 listings, 3 categories,
+  1 guild and 4 migration rows kept.** Reference data is *game content*, not player data — deleting it would
+  mean re-seeding for nothing, and `mst_player_item → mst_item` is `ON DELETE RESTRICT` so it could not be
+  deleted while anyone held an item anyway. The delete is **one statement** (`DELETE FROM mst_player`) because
+  all four child tables declare `ON DELETE CASCADE`, but the script still counts every table **before and
+  after** rather than trusting that — a cascade that silently stopped working would otherwise look like
+  success. It prints **who** is about to be deleted, not just counts, and backs up all five tables to
+  `DevTools/backups/` **before** touching anything. The backup lives outside the repo on purpose: it holds
+  real Discord ids and balances, and this project is a published repo. **199 tests still pass** against the
+  now-empty player table.
+- ⚠️ **Corrected a command I had handed Ote in the previous session.** I had told him
+  `import-legacy-players.mjs --yes --overwrite` would restore his own legacy row. Checking it properly before
+  running it, it would have done **two** things wrong: (1) `--overwrite` writes the legacy row over the live
+  one unconditionally, and `ardland` (759057979436826644) was **ahead** of their legacy row from playing the
+  new bot — 331 coins / level 5 / 11 catches against a legacy 200 / level 1 / 0 — so it would have taken real
+  progress away from a real player; and (2) the `provision` ledger row it appends carries
+  `money_delta = the whole balance`, so for anyone with existing history the chain
+  `money_after == previous money_after + money_delta` no longer holds and **`explainBalance()` reports the
+  ledger as broken**. A restore has to be recorded as a `correction` with the **true** delta. Moot now, but it
+  was one arrow-up away in a shell history, so `import-legacy-players.mjs` **now refuses to run** and names
+  both defects; `--force-legacy-import` overrides.
+- Next action: **coinflip + dice** — the rig question is closed, so nothing blocks them. Coinflip: min 6 to
+  play, bet ≥3, bet ≤ half your money (default = half), `h`/`head`/`หัว` and `t`/`tail`/`ก้อย`/`หาง`, 1:1.
+  Dice: min 2 to play, bet 2–1000 and ≤ your money with default 10, even/odd/high/low pays 1:1 and the **exact
+  number pays ×3**; high is `>3` so 4-5-6, and there is no push on any face. Then **blackjack** (needs
+  ephemeral hands so players cannot see each other's cards; `player_hand` was module-level so it hosted one
+  game bot-wide), then wordle and minesweeper.
