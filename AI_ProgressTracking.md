@@ -140,3 +140,54 @@ The work that came *before* this project is workspace-level and lives in
   rules and numbers it needs are already in `AI_CarryOn.md` §📐. **Not started** — deliberately not begun
   while Ote is standing up the GitHub repo, so he pushes a tree he has seen rather than one that grew nine
   tables underneath him.
+
+### 2026-08-12 23:00
+
+- Summary: **The JSON data model became proper SQL, the economy was ported behind the seam, and it is proven
+  atomic against the real database.** Ote: *"continue porting, and as you go, commit push, update docs"* with
+  the repo at `github.com/OteractiveStudio/MowCodeGamingBotY`. Three commits pushed to `main`.
+  **(1) 002_game_core.sql — eight new tables, 11 in total.** `mst_player_state` (the legacy `inventory` +
+  `stats` blocks, defaults straight from `settings.json.default_inventory`: money 200, 10 rods, size 1,
+  level 1) · `mst_player_item` (**a row per item**, with `quantity > 0` enforced so owning none is the
+  *absence* of a row — one representation of empty) · `mst_item` + `mst_market_category` +
+  `mst_market_listing` (**three tables because `fishingrod` is listed in BOTH `Quick_menu` and `Tool`** at the
+  same price in the legacy market.json — a category column on the item cannot express that) · `mst_fish`
+  (tier CHECK-constrained to **0–9**, which is load-bearing: the legacy draw builds a pool with
+  `[fish] * (10 - tier)`, so tier 10 is undrawable and tier 11 contributes a NEGATIVE count and corrupts it —
+  `AmogusTheFish` at tier 9 sits on that edge) · `txn_purchase` (with `unit_price` at time of sale and a
+  CHECK that `total = unit_price * quantity`) · `log_economy` (append-only). Money deliberately has **no
+  non-negative constraint** — bad econ below −20 is a real game state. Level is constrained to **0–99**
+  because 100 converts to a crystal. **(2) Reference data transcribed** into
+  `database/seeds/reference_data.js` — 9 fish, 8 items, 3 categories, 9 listings — **baked in rather than read
+  from the legacy tree, because the repo must stand alone now that it is published.** **(3) The economy.**
+  `app/data/economy.js` locks the state row with `SELECT … FOR UPDATE`, computes the cascade, and writes the
+  UPDATE plus its `log_economy` row in ONE transaction. `cascadeProgress()` is **pure** and unit-tested with
+  no database. `explainBalance()` rebuilds a balance from its ledger and reports whether the chain
+  reconciles. `/money balance|give|history` and `/whoami` now shows a wallet. **75 tests pass, exit 0.**
+- Files touched: `database/migrations/002_game_core.sql` · `database/models/` (8 new + registry) ·
+  `database/seeds/reference_data.js` · `database/scripts/seed.js` · `app/data/economy.js` ·
+  `app/data/player.js` (provisions state + its `provision` log row in one transaction) ·
+  `app/cogs/economy/index.js` · `app/cogs/player/index.js` · `test/unit/economy-cascade.test.mjs` ·
+  `test/checks/economy.check.mjs` · `test/unit/model-name-parity.test.mjs` (now scans ALL migrations, and
+  asserts every FK is schema-qualified) · `package.json` (`db:seed`) · `README.md` · `AI_CarryOn.md`.
+- Decisions: 🔑 **The concurrency test was FALSIFIED before being trusted.** The suite's headline case fires
+  50 concurrent credits at one player; a passing test there proves nothing unless it can fail, so the legacy
+  shape (read → modify → write, no lock) was run under identical load first. **It lost 147 of 150 coins —
+  200 → 203, only 1 of 50 credits survived.** The new data layer lost 0 (200 → 350). That measurement is now
+  in the README and the commit message, because it is the entire justification for the rewrite in one number.
+  **Four deliberate divergences from the legacy, each recorded as a game-balance decision that is Ote's to
+  reverse and each one line to undo:** a transfer requires the sender to afford it (the legacy would push a
+  giver negative); **a transfer grants NO exp** (every legacy `money_add` granted exp equal to the money, so
+  two players passing coins back and forth would have been an infinite exp machine); market keys normalised
+  to lowercase with presentation in `display_name`; and ⚠️ **the level-0 zero-cap quirk was REPRODUCED, not
+  fixed** — at level 0 with no crystals the cap is 0, so even a zero gain levels the player to 1, and it is
+  asserted in a test rather than silently corrected. **Transfers lock both state rows in sorted id order**,
+  because two simultaneous opposite transfers between the same pair would otherwise deadlock. **BIGINT is
+  parsed deliberately** — pg returns it as a string, and `toInt()` throws rather than doing quietly wrong
+  arithmetic on someone's money. **Provisioning writes a `provision` ledger row**, so a balance is
+  explainable from row one instead of starting as 200 coins from nowhere.
+- Next action: **fishing** — the weighted draw, rod consumption, `fishing_count`, and `fishing auto`'s 30-rod
+  cap as ONE transaction instead of the legacy's 120 file rewrites. `mst_fish` is seeded and
+  `addMoney(reason:'fishing_catch')` already exists, so a catch is a few lines behind the seam. Then
+  inventory/market buying. 🔴 Still blocking any real end-to-end proof: **the bot has no application of its
+  own**, so no user has ever invoked a command. ⛔ And still outstanding: **reset the two live legacy tokens.**

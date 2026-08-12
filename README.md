@@ -25,23 +25,40 @@ whole-file read-modify-write      →   one atomic statement per mutation
 
 | Command | What it does |
 |---|---|
+| `/money balance` | Your coins, level, exp toward the next level, crystals, rods, catches |
+| `/money give` | Give coins to another player — atomically, both sides logged |
+| `/money history` | **Where your coins came from** — the ledger, and whether it reconciles |
+| `/whoami` | What the bot has recorded about you, wallet included |
+| `/server` | This server's bot settings (language, music channel, manager role, known-since) |
 | `/ping` | Liveness — round-trip time, gateway latency, uptime |
 | `/about` | What the bot is, and the credits |
-| `/server` | This server's bot settings (language, music channel, manager role, known-since) |
-| `/whoami` | What the bot has recorded about you, and how many players it knows |
 
-That is genuinely all of it right now. Everything below is the original's feature set — **the thing being
-ported** — and none of it is rebuilt yet.
+**Economy and progression are real**, on the rules below. Everything after them is still the original's
+feature set — **the thing being ported** — and not rebuilt yet.
 
-### The game being ported
+### Built: economy and progression
 
-**Economy.** A custom-emoji currency (BezCoin). Check your balance, give coins to another player, admin
-set/adjust. Balances are allowed to go **negative** — below −20 a player is flagged as "bad econ", which the
-original used to gate things. Every coin earned also earns the same amount of **exp**.
+**Coins.** A currency you earn, spend and give away. Balances are allowed to go **negative** — below −20 a
+player is flagged "bad econ", which the original used to gate things, so a non-negative constraint would have
+deleted a feature. Every coin earned also earns the same amount of **exp**, because the original's `money_add`
+called `exp_add(money)`.
 
 **Progression.** Exp fills toward a cap of `level × 10 + crystals × 2`; hitting it levels you up and carries
-the remainder over, cascading if you earn a lot at once. At **level 100** the level resets and you gain a
-**magical crystal**, which raises your exp cap permanently and grew your inventory in the original.
+the remainder over, cascading through several levels if you earn a lot at once. At **level 100** the level
+resets and you gain a **magical crystal**, which raises your exp cap permanently.
+
+One quirk is **reproduced rather than fixed**: at level 0 with no crystals the cap is 0, so even a zero gain
+levels you to 1. The original did that. Changing it would change the game, so it is asserted in a test
+instead of quietly corrected.
+
+**Every coin movement is logged** in the same transaction that moves it, which is why `/money history` exists
+and why it can tell you if its own ledger fails to reconcile against your balance.
+
+Two deliberate divergences from the original, each one line to reverse: a **transfer requires the sender to
+afford it** (a negative balance should come from a penalty, not from generosity), and a **transfer grants no
+exp** (otherwise two players passing the same coins back and forth is an infinite exp machine).
+
+### Still to port
 
 **Fishing.** Buy rods from the market, cast, and pull a **tier-weighted** random catch — lower tiers are more
 common, and the two most likely results are `Nothing` and `Trash`. A real catch is auto-sold for coins (and
@@ -95,6 +112,17 @@ player fishing performed **120+ sequential whole-file rewrites** of `players_inv
 commands interleaved. Any two overlapping commands, and one of them silently lost. Balances were, strictly
 speaking, guesses.
 
+**Measured, on this schema** — 50 concurrent credits of 3 coins to the same player:
+
+| | start | end | lost |
+|---|---|---|---|
+| the original's shape: read → modify → write | 200 | **203** | **147 of 150** |
+| this data layer: `SELECT … FOR UPDATE` in one transaction | 200 | **350** | 0 |
+
+Only **1 of 50** credits survived the old pattern. That number is not a hypothetical — it was run against
+this database before the test that asserts it was written, because an assertion that cannot fail proves
+nothing.
+
 The older version was worse: **parallel line-indexed text files**, where line *N* of `data_username.txt`,
 `data_economy.txt` and `data_fishing_rod.txt` were the same player, joined by line number.
 
@@ -112,13 +140,14 @@ That is what a database fixes, and it is the actual point of this project.
 
 ## Status — honest version
 
-**The scaffold is real and tested. The game is not built yet.**
+**Economy works. The rest of the game does not exist yet.**
 
-✅ Boots · ✅ connects to Discord and comes online · ✅ schema applied and verified · ✅ **45 tests passing**
-against the real database, one command, real exit code.
+✅ Boots · ✅ connects to Discord and comes online · ✅ 11 tables applied and verified · ✅ coins, exp, levels
+and crystals with a reconcilable ledger · ✅ **75 tests passing** against the real database, one command, real
+exit code.
 
-❌ **No game yet.** No economy, fishing, inventory, market or games — `mst_player` is identity only, so
-`/whoami` has no wallet to show. The commands that exist are `/ping`, `/about`, `/server`, `/whoami`.
+❌ **No fishing, inventory, market or games yet** — `mst_fish`, `mst_item` and the market tables exist and are
+seeded, but nothing spends from them. No prefix commands, no i18n, no supervisor.
 
 The full ❌ list, and every decision behind the design, lives in [`AI_CarryOn.md`](AI_CarryOn.md).
 
@@ -128,7 +157,8 @@ The full ❌ list, and every decision behind the design, lives in [`AI_CarryOn.m
 npm install
 cp config.example.json config.json     # then fill it in — see below
 npm run db:migrate                     # create the schema (idempotent, safe to re-run)
-npm test                               # 45 checks, real exit code
+npm run db:seed                        # load the fish, items and market (also idempotent)
+npm test                               # 75 checks, real exit code
 npm run bot:register                   # publish slash commands to Discord
 npm start                              # or: npm run dev  (node --watch)
 ```
@@ -158,15 +188,21 @@ app/
     registry.js             publishes the command list to Discord
     index.js                assembles the above and logs in
   cogs/                     one directory per feature — see below
+    economy/                /money balance | give | history
     system/                 /ping, /about
     guild/                  /server, and join/leave provisioning
     player/                 /whoami
   data/                     the only code that reads or writes rows
+    economy.js              the cascade, the locking, and the ledger
     player.js  guild.js
 
 database/
-  migrations/001_core.sql   the source of truth for the schema
-  scripts/migrate.js        applies it as the app role, once each, with a checksum ledger
+  migrations/               THE SOURCE OF TRUTH for the schema
+    001_core.sql            log_message, mst_guild, mst_player
+    002_game_core.sql       player state, items, market, fish, purchases, economy log
+  scripts/migrate.js        applies them as the app role, once each, with a checksum ledger
+  scripts/seed.js           loads the reference data
+  seeds/reference_data.js   the fish, items and market, transcribed from the original
   models/                   Sequelize models that MIRROR the SQL
   connection-config.js      the one helper that resolves connection settings — and throws
   index.js                  initDB
@@ -258,10 +294,15 @@ Postgres will not answer, the suite reports *its own* failure and stops rather t
 Checks clean up their fixtures **before and after** — cleaning only at the end is how a killed run poisons
 the next one and gets the product blamed for it.
 
-Some of what is asserted, as a flavour of the intent: 25 concurrent provisioning calls for the same player
-produce exactly one row and exactly one winner · model columns and table columns match in *both* directions
-· the CHECK constraints really do refuse bad data · the logger's off state is off · a guild that removes the
-bot is marked, never deleted, so its settings survive a re-invite.
+Some of what is asserted, as a flavour of the intent: **50 concurrent credits to one player lose nothing, and
+the ledger still reconciles afterwards** · 25 concurrent provisioning calls produce exactly one row and one
+winner · model columns and table columns match in *both* directions · the CHECK constraints really do refuse
+bad data · a transfer larger than the balance changes nothing · a rejected credit leaves no log row behind ·
+the logger's off state is off · a guild that removes the bot is marked, never deleted.
+
+The progression rules have their own unit tests with no database at all, including a sweep over levels 0–99,
+0–9 crystals and gains up to 100,000 asserting the cascade always settles below its own cap. Those tests
+encode **game balance**, so changing one is a design decision, not a refactor.
 
 ## Credits
 

@@ -12,24 +12,27 @@
 
 ## ▶▶ START HERE
 
-**The scaffold is real, the bot has been ONLINE in Discord, and 45 tests pass against the real database.
-The game itself is not built.**
+**The bot has been ONLINE in Discord, the data model is now proper SQL, the economy works, and 75 tests pass
+against the real database. Fishing, market, inventory and games are not built.**
 
-⚠️ Two claims in this file have already fallen and are corrected below rather than deleted: *"Nothing is
-built"* (fell 2026-08-12 when Ote asked for the scaffold) and *"Nothing has ever connected to Discord"* (fell
-the same evening — see the ✅ table).
+⚠️ Three claims in this file have fallen and are corrected rather than deleted: *"Nothing is built"* (fell
+when Ote asked for the scaffold), *"Nothing has ever connected to Discord"* (fell the same evening), and
+*"the game is not built"* (partly fell — economy and progression are real now).
+
+**Repo: `github.com/OteractiveStudio/MowCodeGamingBotY`, branch `main`.** ⚠️ Note the repo name drops the `e`
+— `MowCodeGamingBotY` there, `MowCodeGamingBoteY` here. Flagged to Ote 2026-08-12; unresolved, harmless.
 
 ```bash
 npm install
 cp config.example.json config.json       # then fill in the secrets
 npm run db:migrate                       # idempotent
-npm test                                 # 45 checks, real exit code
+npm run db:seed                          # fish, items, market — idempotent
+npm test                                 # 75 checks, real exit code
 npm start                                # fails fast without a Discord token — by design
 ```
 
-**The next real work is the game itself:** the legacy JSON data model redesigned as proper SQL, then the
-economy and fishing features ported behind it. The rules and numbers have already been read out of the
-legacy source — see 📐 below, so nobody has to re-read the Python.
+**The next real work is fishing** — the weighted draw, then `fishing auto` with its 30-rod cap as one
+transaction instead of 120 file rewrites. Every rule it needs is in 📐 below; do not re-read the Python.
 
 ## 📌 STANDING RULES — git and commits (read before committing anything)
 
@@ -67,14 +70,24 @@ in a reference doc gets broken by the next agent that does not open it.
 | ✅ **Migration** | `001_core.sql` applied; re-running says *"up to date"*. `log_migration` holds its sha256, so a migration edited after being applied is caught. |
 | ✅ **ONLINE IN DISCORD** | 2026-08-12 22:31 — the bot connected through the real `startBot()` (cog loading, validation, event wiring, dispatch) and appeared online as **MowCodeGamingBot#1501**, id `892820973030637608`, in **10 guilds**, presence *"Listening to /ping"*. Ote confirmed visually. Held 240s, disconnected cleanly, exit 0. ⚠️ It used the **legacy token** — see 🔴 below. |
 | ✅ **Fails fast** | With no token, `npm start` prints one readable STARTUP FAILED block and exits **1**; the stack goes to the log file and `log_message`, not the console. |
-| ✅ **Tests** | `npm test` → **45 passed, exit 0**, ~0.5s. Includes 25 concurrent upserts proving one winner, model↔table column parity both directions, CHECK constraints actually refusing bad data, and the logger's **off** state. |
-| ✅ **Cogs** | 3 loaded, 4 commands — `system` (`/ping`, `/about`), `guild` (`/server` + join/leave), `player` (`/whoami`). |
+| ✅ **Tests** | `npm test` → **75 passed, exit 0**, ~0.5s. Includes the 50-concurrent-credit race, 25 concurrent upserts, model↔table column parity both directions, CHECK constraints actually refusing bad data, and the logger's **off** state. |
+| ✅ **Cogs** | 4 loaded, 6 commands — `economy` (`/money balance\|give\|history`), `system` (`/ping`, `/about`), `guild` (`/server` + join/leave), `player` (`/whoami`, now with a wallet). |
+| ✅ **The data model is SQL** | `002_game_core.sql` applied: **11 tables total.** `mst_player_state` · `mst_item` · `mst_player_item` (a row per item) · `mst_market_category` + `mst_market_listing` · `mst_fish` · `txn_purchase` · `log_economy`. Column parity verified against all 11. |
+| ✅ **Reference data seeded** | `npm run db:seed` → 9 fish · 8 items · 3 categories · 9 listings, transcribed into `database/seeds/reference_data.js` so **the repo stands alone** and does not read the legacy tree. |
+| ✅ **Economy works, and it is PROVEN atomic** | 🔑 Measured on this schema with 50 concurrent +3 credits to one player: the **legacy shape lost 147 of 150 coins** (200 → 203 — only 1 of 50 credits survived); this data layer lost **0** (200 → 350). The falsification was run *before* trusting the passing test, because an assertion that cannot fail proves nothing. |
+| ✅ **A balance can be explained** | Every money/exp mutation writes one `log_economy` row **in the same transaction**, so the log cannot disagree with the balance. `explainBalance()` rebuilds it and checks the chain; `/money history` surfaces it and says so out loud if it fails to reconcile. |
 
 ## ❌ What does NOT exist — name it, so nobody assumes
 
-- ❌ **The game.** No economy, fishing, inventory, market or games. No `mst_player_state`,
-  `mst_player_item`, `mst_fish`, `mst_market_*`, `txn_purchase`, `log_economy`. `mst_player` is **identity
-  only** — `/whoami` has no wallet to show and says so. **This is the next piece of work.**
+- ⚠️ **Partly fallen:** this used to say *"The game. No economy, fishing, inventory, market or games…
+  `mst_player` is identity only."* **Economy and progression are now built.** What is still missing:
+  - ❌ **Fishing.** `mst_fish` is seeded but nothing draws from it. Needs the weighted draw (`10 - tier`),
+    rod consumption, `fishing_count`, and `fishing auto`'s 30-rod cap as ONE transaction. **Next up.**
+  - ❌ **Inventory and market.** `mst_item`, `mst_player_item`, `mst_market_*` exist and are seeded, but
+    nothing buys, holds or spends. The inventory-size limit is unenforced because nothing can hold an item.
+  - ❌ **Games.** None of the seven. `log_economy` has `game_win`/`game_loss` reasons ready for them.
+  - ❌ **Admin/steal/cheat.** `/money` has no admin adjust; `steal_gain`/`steal_loss` reasons exist but no
+    rules do. Needs the permission model and the knife/gun/passkey items to mean something.
 - ❌ **The bot has no application of its own.** It has been online *once*, borrowing the legacy
   application's identity. There is still no token in `config.json`, so `npm run bot:register` has never run
   and **no slash command has ever been invoked by a real user.** The command bodies are unit-tested; the
@@ -184,17 +197,30 @@ From `BN_bot/MCGB_BasicClass.py`, `cogs/fishing_cog.py`, `settings.json` and the
 | **i18n depth** | English-only vs the legacy's 64 languages. |
 | **importing the 24 legacy players** | Still a later data job, still needs no schema change. |
 
+## ⚠️ Divergences from the legacy, deliberate — each one line to reverse
+
+Recorded because they are **game-balance decisions**, which are Ote's, not refactors:
+
+1. **A transfer requires the sender to afford it.** The legacy had no concept of a transfer, and `money_add`
+   would happily push a giver negative. A negative balance should come from a penalty, not generosity.
+   ⇒ It is the `senderMoney < amount` check in `app/data/economy.js`.
+2. **A transfer grants NO exp.** In the legacy every `money_add` granted exp equal to the money, so two
+   players passing the same coins back and forth would have been an **infinite exp machine.**
+   ⇒ It is `expDelta: 0` in `transfer()`.
+3. **Market/category keys were normalised to lowercase** (`Quick_menu` → `quick_menu`), with presentation
+   kept in `display_name`. The legacy's answer to case was to define the same command five times.
+4. **The level-0 zero-cap quirk was NOT fixed** — at level 0 with no crystals the cap is 0, so even a zero
+   gain levels the player to 1. Reproduced and asserted in a test, because changing it changes the game.
+
 ## ⏭ NEXT, in order
 
-1. **The data model redesign — the JSON becomes proper SQL.** `002_game_core.sql`: `mst_player_state`
-   (money, exp, level, crystal, rods, inventory_size, catch count) · `log_economy` (append-only, so a balance
-   can be *explained*, not just read) · `mst_item` + `mst_player_item` (**a row per item, not a dict**) ·
-   `mst_market_category` + `mst_market_listing` (because `fishingrod` is listed twice) · `mst_fish` ·
-   `txn_purchase`. All rules for it are in 📐 above.
-2. **Economy behind the seam** — `app/data/economy.js` doing the money+exp+level+crystal cascade in **one
-   locked transaction** with its `log_economy` row, and a test firing concurrent credits that asserts the
-   final balance equals the sum with nothing lost. This is the legacy's central defect, so it gets the
-   strongest test in the suite.
-3. **Fishing** — seed `mst_fish` from the legacy JSON, port the weighted draw, then `fishing auto` with its
-   30-rod cap as one transaction instead of 120 file rewrites.
-4. **Its own Discord application**, then `/ping` invoked by a real user — the first true end-to-end proof.
+1. **Fishing** — the weighted draw (`weight = 10 - tier`, so `Nothing`/`Trash` dominate), rod consumption,
+   `fishing_count`, and **`fishing auto` (30-rod cap) as ONE transaction** rather than the legacy's 120 file
+   rewrites. `mst_fish` is already seeded; `addMoney(reason: 'fishing_catch', ref: fish_key)` already exists,
+   so a catch is a few lines behind the seam.
+2. **Inventory + market** — buying moves coins via `addMoney(reason: 'market_purchase')`, writes
+   `txn_purchase`, and inserts/increments `mst_player_item` in the same transaction, honouring
+   `inventory_size`. The `bag` item raises that size.
+3. **Its own Discord application**, then `/money balance` invoked by a real user — the first true end-to-end
+   proof of a command with a database behind it.
+4. **Games**, once feature scope is decided. `log_economy` already accepts `game_win`/`game_loss`.
