@@ -298,8 +298,17 @@ async function startGame(interaction, ctx) {
         withBot,
     });
 
-    await respond(interaction, withBot ? boardView(game) : challengeView(game));
-    game.messageId = (await interaction.fetchReply()).id;
+    // ⚠️ If the reply fails, the session MUST go with it. Ote hit exactly this: an /ox whose
+    // reply died on the 3-second limit left the game in the map, so the channel answered
+    // "There is already an OX game in this channel" for a game that was never shown and could
+    // never be played. A session created before a reply has to be rolled back like anything else.
+    try {
+        await respond(interaction, withBot ? boardView(game) : challengeView(game));
+        game.messageId = (await interaction.fetchReply()).id;
+    } catch (err) {
+        sessions.end(channelId);
+        throw err;
+    }
 
     game.timer = setTimeout(() => {
         void expireGame(interaction, ctx).catch(() => {});

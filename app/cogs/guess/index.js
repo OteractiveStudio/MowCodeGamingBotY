@@ -239,9 +239,15 @@ async function startGame(interaction, ctx) {
         target: target ?? null,
     });
 
-    await respond(interaction, buildBoard(game));
-    const message = await interaction.fetchReply();
-    game.messageId = message.id;
+    // ⚠️ Roll the session back if the reply fails, or the channel is left holding a game that
+    // was never shown and cannot be played — see the same guard in the ox cog.
+    try {
+        await respond(interaction, buildBoard(game));
+        game.messageId = (await interaction.fetchReply()).id;
+    } catch (err) {
+        sessions.end(channelId);
+        throw err;
+    }
 
     // The legacy used `await asyncio.sleep(300)` inline, which held the command coroutine
     // open for five minutes. A timer lets the handler finish and still expire the game.
