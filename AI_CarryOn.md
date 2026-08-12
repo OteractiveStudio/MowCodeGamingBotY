@@ -38,7 +38,8 @@ Ote's instruction. Its token is in `config.json` via `DevTools/maintenance/use-l
 | ✅ **Economy** | Coins, exp, level, crystals. Cascade is pure + unit-tested. Every mutation writes `log_economy` **in the same transaction**. 🔑 Measured: legacy read-modify-write lost **147 of 150** coins under 50 concurrent credits; this loses **0**. |
 | ✅ **Fishing** | Weighted draw (`10 - tier`), 9 fish, 66 total weight. `auto` = 30 rods in **ONE transaction**. **His animation is restored**, with his own `rod_left < 21` throttle. |
 | ✅ **Market** | **Public click-through**: full contents visible, direct buttons per section and item, quantity buttons, modal for a custom amount, **Close** button. Owner-gated — anyone may click, non-owners get a private rejection. |
-| ✅ **Games** | `/guess` (bet 10–1000, 7 attempts, ×5/×2/×1.5/×0.5, per-guess cost) and `/ox` (3×3 **button grid**, vs bot or duel). |
+| ✅ **Games** | `/guess` — **you type a bare number in chat to guess**, his original UX (button+modal kept as fallback). `/ox` — 3×3 **button grid** labelled 1–9, vs bot or duel. |
+| ✅ **MESSAGE CONTENT intent is ENABLED** on the legacy application | Verified by a successful login with it requested (`wired 4 event binding(s)`). ⚠️ Requesting it without the portal toggle makes **login itself fail**; `app/bot/index.js` catches that, rebuilds without it, and says which switch to flip. Flag: `discord.message_content_intent`. |
 | ✅ **Legacy players imported** | All **24**, keyed by Discord id. `emanresu` leads: 1401 coins, level 31, 397 catches. |
 | ✅ **Drift check** | On boot, compares the published command list to the code and names what differs. Verified live. |
 
@@ -87,7 +88,19 @@ Ote's instruction. Its token is in `config.json` via `DevTools/maintenance/use-l
 6. **`setDMPermission` is deprecated** → `setContexts(InteractionContextType.Guild)`.
 7. **`Events.ClientReady === "clientReady"`**; the bare string `"ready"` is deprecated.
 8. **BIGINT comes back from pg as a STRING.** `toInt()` throws rather than doing wrong arithmetic on money.
-9. ⚠️ **I claimed two OX payout bugs that DO NOT EXIST** — I stopped reading at the first win-check. `OX_out`
+9. 🔑 **`npm start` ORPHANS THE BOT.** `TaskStop`/killing npm leaves its `node main.js` child holding
+   the gateway — **six** old builds were answering interactions at once, so freshly-rendered buttons
+   were handled by processes that had never heard of them. ⇒ **Always run `node main.js` directly**,
+   and check with
+   `Get-CimInstance Win32_Process -Filter "Name='node.exe'" | ? { $_.CommandLine -like '*main.js*' }`.
+   ⚠️ PID 23436 (`"C:\Program Files\nodejs\node.exe" main.js`, started 22:12) is **NOT ours** — leave it.
+10. **A session created before a reply must be rolled back if the reply throws.** An `/ox` whose reply
+   died on the 3-second limit left the game in the map, so the channel refused new games for one that
+   was never shown. Both ox and guess now undo it.
+11. ⚠️ **An `on_message` listener must be free for non-matching messages.** His `fishing_cog` ran a
+   NETWORK TRANSLATION per message to test for "fish". The guess listener checks: bot? → Map lookup? →
+   bare-digits regex? — and only then touches the database.
+12. ⚠️ **I claimed two OX payout bugs that DO NOT EXIST** — I stopped reading at the first win-check. `OX_out`
    has TWO, one per mover; the bot's win is handled separately and charges the human by index. His code was
    right. Corrected in `1a82080` and in `app/data/ox.js`'s header.
 
@@ -126,14 +139,22 @@ Ote's instruction. Its token is in `config.json` via `DevTools/maintenance/use-l
 8. **No bet escrow.** Sessions are in-memory; escrow + a restart would take coins with no game to win them
    back. Nothing is deducted until a game ends, so a lost session costs nobody anything.
 
-## ⏭ NEXT, in order
+## ⏭ NEXT, in order — recommended sequence
 
-1. **Blackjack** — the game that needs **ephemeral hands** so players cannot see each other's cards. The
-   legacy kept `player_hand` module-level, so it hosted one game bot-wide; use `ChannelSessions`.
-2. **Stealing** — gives `knife`/`gun`/`passkey` and the defensive pets a purpose; `steal_gain`/`steal_loss`
-   are already valid ledger reasons.
-3. **coinflip / dice** — both small; coinflip's legacy rules are in `CsGamingBot.py` around line 1240
-   (min 6 coins to play, bet ≥3, bet ≤ half your money, and a rigged branch above 100,000 coins).
+1. 🔑 **STEALING — do this first.** The market currently sells **five items that do nothing**: `knife`,
+   `gun`, `passkey`, and the two pets that exist purely to defend against them (*"Cat can make noise and
+   prevent you from being stolen"* · *"Dog can protect you from being robbed or stolen"*). That is the
+   biggest dressed-up placeholder in the product, and `steal_gain`/`steal_loss` are already valid ledger
+   reasons. Legacy source: `CsGamingBot.py`, `steal`/`cheat` commands.
+2. **coinflip + dice** — both tiny, and they finish the "quick bet" set. Coinflip's rules are in
+   `CsGamingBot.py` ~line 1240: **min 6 coins to play · bet ≥3 · bet ≤ HALF your money** (default bet is
+   half) · ⚠️ **and a rigged branch above 100,000 coins that stacks the odds against the player** — worth
+   asking him whether that stays.
+3. **Blackjack** — the big one. Needs **ephemeral hands** so players cannot see each other's cards, emoji
+   cards, and ace prompting. `player_hand`/`playing_bj` were module-level in the legacy, so it hosted one
+   game bot-wide; use `ChannelSessions`.
+4. **wordle** — `BN_bot/data/wordle/words.txt` + `daily_word.json` need importing as reference data.
+5. **minesweeper** — self-contained generator, the oldest file in the tree (2020, pre-Discord).
 4. **Ote's own legacy row** is NOT imported — `/whoami` provisioned him fresh first. His legacy figures:
    925 coins, level 23, 131 catches, dog×1. Run
    `node DevTools/maintenance/import-legacy-players.mjs --yes --overwrite` to take it (overwrites his
