@@ -25,19 +25,14 @@ whole-file read-modify-write      →   one atomic statement per mutation
 
 | Command | What it does |
 |---|---|
-| `/fishing cast` | Cast once. Weighted draw, rod consumed, catch auto-sold |
-| `/fishing auto` | Burn every rod you have, up to 30, **in one transaction** |
-| `/fishing rates` | What is in the sea and how likely each one is |
-| `/market` | Everything for sale, by category |
-| `/market buy` | Buy something — with autocomplete |
+| `/fishing cast` · `auto` · `rates` | Cast, or burn every rod you have (up to 30) **in one transaction** |
+| `/market` | The market — full contents, direct buttons per section and item, Close |
 | `/inventory` | What you are carrying, and your slots |
-| `/money balance` | Your coins, level, exp toward the next level, crystals, rods, catches |
-| `/money give` | Give coins to another player — atomically, both sides logged |
-| `/money history` | **Where your coins came from** — the ledger, and whether it reconciles |
-| `/whoami` | What the bot has recorded about you, wallet included |
-| `/server` | This server's bot settings (language, music channel, manager role, known-since) |
-| `/ping` | Liveness — round-trip time, gateway latency, uptime |
-| `/about` | What the bot is, and the credits |
+| `/money balance` · `give` · `history` | Coins, transfers, and **where every coin came from** |
+| `/guess start` · `try` · `rules` | Guess the number — **type a bare number in chat**, 7 shared attempts |
+| `/ox play` · `rules` | Noughts and crosses on a **3×3 button grid**, vs the bot or a duel |
+| `/steal` · `/crime` | Rob someone, if you own the tools. `/crime` explains the odds |
+| `/ping` · `/about` | Liveness, and the credits |
 
 **The core loop works**: buy rods → fish → earn coins and exp → level up → buy more. On the original's rules,
 below. Everything after that is still its feature set — **the thing being ported** — and not rebuilt yet.
@@ -96,27 +91,59 @@ could both pass the check and both succeed.
 **15** rods, but its `fishing auto` is written to burn up to **30**. Both numbers are his, in different files,
 and they cannot both be reachable through the market alone. Which one is wrong is a balance decision.
 
-Autocomplete replaces the original's **emoji-reaction** buy flow, which tracked mid-purchase players in a
+**Buttons replace the original's emoji-reaction buy flow**, which tracked mid-purchase players in a
 module-level dict — so the bot could only really host one market session at a time, and a crash mid-flow left
-you stuck in it.
+you stuck in it. The menu is public and anyone may click it; a click that is not the shopper's gets a private
+"this isn't yours", which is what the original's reaction handler did minus the reaction it had to remove
+afterwards. The whole navigation state lives in the button ids, so **there is no session state to strand**.
+
+### Built: three games
+
+**Guess the number.** Bet 10–1000, **seven attempts shared by the whole channel**, five minutes. Solve it on
+the first try for **×5** the bet, within three for **×2**, within five for **×1.5**, on the sixth for **×0.5**,
+on the seventh for nothing but thanks. Everyone else who guessed pays `round(their guesses × bet ÷ 7)`, so
+seven guesses costs a whole bet. Set the target yourself instead of the bot and you win the bet if nobody
+cracks it — which is where the original had a bug: its message said the target-setter won while the code paid
+the *last guesser*.
+
+You **type a bare number in chat** to guess, exactly as the original did. That needs Discord's privileged
+Message Content intent, and the handler is written against the original's worst habit: its `on_message` fired
+a **network translation request on every message in every server** just to check for the word "fish". Here a
+channel with no game costs one in-memory lookup.
+
+**OX (noughts and crosses).** A real **3×3 grid of buttons**, labelled 1–9. The original printed a text grid
+and you typed `11`–`33` for row and column — necessary then, pointless when you can click the square. Duel
+someone for up to 1000, or play the bot for up to 40, where **winning pays half the bet and losing costs all
+of it**. The bot plays at random *on purpose*: at those odds a competent bot would make betting a pure loss.
+
+**Stealing.** The knife, gun, passkey, cat and dog were props in the original — the shop sold them, the
+descriptions promised things, and no code ever read them. Now they work, and the mechanic is taken **from the
+item descriptions themselves**:
+
+| Item | The description says | So it is |
+|---|---|---|
+| 🔑 passkey | "steal someone's money" | a steal, 35% |
+| 🔪 knife | "rob someone" | a rob, 50% |
+| 🔫 gun | "rob someone" | a rob, 70% |
+| 🐱 cat | "prevent you from being **stolen**" | defends steal only, −30% |
+| 🐶 dog | "protect you from being **robbed or stolen**" | defends both, −50% |
+
+A cat is no use against a knife, because that is what the original says. Succeed and take up to a third of
+their coins; fail and post a third of yours as bail. The tool is consumed either way, and there is a
+ten-minute cooldown — the original had none, which made it grief-spam.
 
 ### Still to port
 
-**Games.** Guess-the-number with betting · OX / tic-tac-toe against a player or the bot · Blackjack dealt
-with emoji cards, including ace prompting · coinflip · dice · Wordle with a daily word · a minesweeper
-generator (the oldest file in the original, from 2020, written before any of it was a Discord bot).
+**Blackjack** dealt with emoji cards, including ace prompting · **coinflip** · **dice** · **Wordle** with a
+daily word · a **minesweeper** generator (the oldest file in the original, from 2020, written before any of it
+was a Discord bot).
 
-**Stealing and robbing.** The knife, gun and passkey are for sale and currently do nothing — the original had
-`steal` and `cheat`, and pets existed to defend against them (*"Cat can make noise and prevent you from being
-stolen"*, *"Dog can protect you from being robbed"*). The ledger already has `steal_gain`/`steal_loss` reasons
-waiting.
-
-**Multilingual.** The original passed every user-facing string through translation and supported 64
-languages, with a Thai original kept alongside the English one and a credited translator.
-
-**Live ops from inside Discord.** Reload, unload and list cogs without restarting · a restart command that
+**Admin tools from inside Discord.** Reload/unload/list cogs without restarting · a restart command that
 counted down, swapped the avatar, left voice cleanly and posted "I'm back!" on its next boot · a data editor ·
 a sandboxed file browser · rotating status · an avatar self-check that repaired itself with retries.
+
+**Multilingual.** The original passed every user-facing string through translation and supported 64 languages,
+with a Thai original kept alongside the English one and a credited translator.
 
 ### Deliberately not in this project
 
@@ -173,15 +200,14 @@ That is what a database fixes, and it is the actual point of this project.
 
 ## Status — honest version
 
-**The game loop works. The games do not exist yet.**
+**It is live and being played.** The bot runs in a real server on a real database.
 
-✅ Boots · ✅ connects to Discord and comes online · ✅ 11 tables applied and verified · ✅ economy, progression,
-fishing, market and inventory, all on the original's numbers · ✅ a ledger that reconciles ·
-✅ **117 tests passing** against the real database, one command, real exit code.
+✅ Economy, progression, fishing, market and inventory — all on the original's numbers · ✅ **three games**:
+guess, OX and stealing · ✅ a ledger that reconciles · ✅ all **24 original players imported**, balances and
+levels intact · ✅ **199 tests** against the real database, one command, real exit code.
 
-❌ **None of the seven games** (guess, OX, blackjack, coinflip, dice, wordle, minesweeper). No stealing or
-robbing, so the knife, gun and passkey do nothing yet. No admin commands. No prefix commands, no i18n, no
-supervisor. ⚠️ And **no user has ever actually run one of these commands** — see below.
+❌ **Still to port:** blackjack, coinflip, dice, wordle, minesweeper · admin commands (`data` editor, `file`
+explorer, `restart`) · i18n · selling items back · prefix commands.
 
 The full ❌ list, and every decision behind the design, lives in [`AI_CarryOn.md`](AI_CarryOn.md).
 
@@ -192,9 +218,9 @@ npm install
 cp config.example.json config.json     # then fill it in — see below
 npm run db:migrate                     # create the schema (idempotent, safe to re-run)
 npm run db:seed                        # load the fish, items and market (also idempotent)
-npm test                               # 117 checks, real exit code
+npm test                               # 199 checks, real exit code
 npm run bot:register                   # publish slash commands to Discord
-npm start                              # or: npm run dev  (node --watch)
+node main.js                           # NOT npm start — see below
 ```
 
 **`config.json` is gitignored** and holds the two secrets — the Discord bot token and the database password.
@@ -221,19 +247,29 @@ app/
     dispatch.js             routes a slash command to its cog; logs whatever throws
     registry.js             publishes the command list to Discord
     index.js                assembles the above and logs in
+  bot/respond.js            answers an interaction whether or not it was deferred
+  bot/permissions.js        who counts as a bot admin (config, never a row)
   cogs/                     one directory per feature — see below
     economy/                /money balance | give | history
-    system/                 /ping, /about
+    fishing/                /fishing cast | auto | rates
+    market/                 /market, /inventory
+    guess/                  /guess start | try | rules   (+ typed guesses)
+    ox/                     /ox play | rules
+    steal/                  /steal, /crime
     guild/                  /server, and join/leave provisioning
-    player/                 /whoami
+    system/                 /ping, /about
   data/                     the only code that reads or writes rows
     economy.js              the cascade, the locking, and the ledger
+    fishing.js  inventory.js  guess.js  ox.js  steal.js
+    session-store.js        one game per channel, with a per-channel lock
     player.js  guild.js
 
 database/
   migrations/               THE SOURCE OF TRUTH for the schema
     001_core.sql            log_message, mst_guild, mst_player
     002_game_core.sql       player state, items, market, fish, purchases, economy log
+    003_timestamps_*.sql    created_at / updated_at on every table
+    004_steal.sql           the steal cooldown
   scripts/migrate.js        applies them as the app role, once each, with a checksum ledger
   scripts/seed.js           loads the reference data
   seeds/reference_data.js   the fish, items and market, transcribed from the original
@@ -329,10 +365,15 @@ Checks clean up their fixtures **before and after** — cleaning only at the end
 the next one and gets the product blamed for it.
 
 Some of what is asserted, as a flavour of the intent: **50 concurrent credits to one player lose nothing, and
-the ledger still reconciles afterwards** · 25 concurrent provisioning calls produce exactly one row and one
-winner · model columns and table columns match in *both* directions · the CHECK constraints really do refuse
-bad data · a transfer larger than the balance changes nothing · a rejected credit leaves no log row behind ·
-the logger's off state is off · a guild that removes the bot is marked, never deleted.
+the ledger still reconciles afterwards** · 20 concurrent fishing casts lose no rods and no coins · two racing
+purchases cannot both spend the same coins · model columns and table columns match in *both* directions · the
+CHECK constraints really do refuse bad data · 60,000 seeded fish draws land within 1.5 points of every stated
+rate · the OX bot only ever picks an empty square, across the whole random range · a permission check with no
+admin list configured means **nobody** is an admin, never everybody · the logger's off state is off.
+
+Several tests exist because a specific line in the original was wrong, and each says so — the guess payout
+that named one winner and paid another, the steal that crashed on a broke victim, the bail that paid you when
+you were in debt. Those are the tests worth reading first.
 
 The progression rules have their own unit tests with no database at all, including a sweep over levels 0–99,
 0–9 crystals and gains up to 100,000 asserting the cascade always settles below its own cap. Those tests

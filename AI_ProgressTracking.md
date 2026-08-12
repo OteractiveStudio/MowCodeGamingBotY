@@ -284,3 +284,60 @@ The work that came *before* this project is workspace-level and lives in
   and `/ox`. ⏭ Ote's own legacy row is still unimported because `/whoami` provisioned him fresh; his legacy
   figures are 925 coins / level 23 / 131 catches / dog×1, recoverable with
   `import-legacy-players.mjs --yes --overwrite`.
+
+### 2026-08-13 00:50
+
+- Summary: **Three games are playable, the bot is live and being tested by Ote continuously, and five shop
+  items stopped being props.** Nine commits (`97a09ff` … `cc7b4c2`). **(1) Typed guessing restored** on his
+  *"can you make it the old style where user type in chat to guess?"* — bare digits in chat, which needs the
+  privileged **Message Content** intent. That turned out to be **already enabled** on the legacy application
+  (unsurprising: the old bot lived on `on_message`), verified by a login with it requested wiring 4 event
+  bindings instead of 3. The handler is written against his own worst defect — `fishing_cog.on_message` fired
+  a **network translation request per message** to test for "fish" — so the checks are ordered bot? → Map
+  lookup? → digits regex?, and a channel with no game costs one in-memory lookup. Then *"dont forget to remove
+  guess button"* ⇒ the button, its modal, the handler branches and three now-dead discord.js builders all
+  went. **(2) OX labels are 1–9** on *"as we use ui, we can improve this"*: his `11`–`33` encoded row and
+  column because you TYPED the coordinate, which buys nothing when you click a square. One character per cell
+  also let the text board gain real rules between squares. **(3) OX got its first tests** — it had shipped and
+  been played live with none, and one failed immediately on a real bug (below). **(4) Stealing**, the module
+  that makes `knife`/`gun`/`passkey`/`cat`/`dog` work. **(5) Cancel is admin-only** and admin identity came
+  back from config. **199 checks pass. 11 commands, 8 cogs.**
+- Files touched: `app/cogs/guess/index.js` (typed guesses, button removed, canceller named) ·
+  `app/cogs/ox/index.js` + `app/data/ox.js` (1–9, drawn grid, validation order) · `test/unit/ox-rules.test.mjs`
+  (new, 24 cases) · `app/data/steal.js` + `app/cogs/steal/index.js` + `test/unit/steal-rules.test.mjs` (new) ·
+  `database/migrations/004_steal.sql` + `mst_player_state` model · `app/bot/permissions.js` +
+  `test/unit/permissions.test.mjs` (new) · `app/bot/client.js` + `app/bot/index.js` (opt-in intent with a
+  fallback) · `config.json`/`config.example.json` (`message_content_intent`, `admin_ids`) · `README.md`
+  (rewritten to match reality) · `AI_CarryOn.md`.
+- Decisions: ⭐ **THE STEAL MECHANIC WAS TAKEN FROM HIS OWN ITEM DESCRIPTIONS**, which specify it exactly:
+  passkey "steal someone's money" → a steal · knife/gun "rob someone" → a rob · cat "prevent you from being
+  STOLEN" → defends steal only · dog "protect you from being ROBBED or STOLEN" → defends both. **A cat is
+  useless against a knife because he wrote that it is.** His `steal` never read the inventory at all, so all
+  five were props. The chance ladder follows his prices (600/1000/3000). Kept: a third of theirs, a third of
+  yours as bail. ⚠️ **Four bugs in his `steal`, each with a test naming it:** `random.randrange(money // 3)`
+  **raises ValueError** when that is ≤0 so robbing a broke player crashed · a **negative balance made bail PAY
+  you** · `robber` was a module-level unpersisted list · a computed-and-discarded `randrange` in the failure
+  branch. Plus a "success" could take 0 and still burn the attempt. **Design changes, his to overrule:** the
+  tool is **consumed** (else one 600-coin passkey steals forever and the market stops being a money sink), a
+  real per-tool chance instead of guaranteed-fail-then-guaranteed-succeed (a tax is not a gamble), a 10-minute
+  cooldown (`last_steal_at`, migration 004), and **crime pays no exp** so robbing cannot be a levelling
+  strategy. ⚠️ **Admin identity moved out of player rows**: his `is_admin` read `players_inv.json →
+  info.is_admin`, which `reset_player` could wipe, so a data reset could strip or grant admin. It is now
+  `config.bot.admin_ids` with his two original ids, in a file no command can edit, and
+  `app/bot/permissions.js` is tested to **never default open**. Triggered by *"make it only admin for now
+  please"* after a player holding merely Manage Messages cancelled his game — a *server* permission that says
+  nothing about who runs this bot. ⚠️ **The OX test suite caught a real ordering bug**: `validateOxStart`
+  checked affordability before bankruptcy, so a player at −50 was told "not enough to bet 10" and never told
+  they were bankrupt. His code checked bankruptcy first and was right to. The test asserted the error CODE
+  rather than the message, which is why it caught it. ⚠️ **A silent `.catch(() => {})` hid a real failure**:
+  the board-repost delete was failing and leaving two boards stacked, with no trace anywhere — the legacy's
+  `except: pass` habit sneaking into new code, in the file that documents why it is a defect. It logs now.
+- Next action: **coinflip + dice**, both small. 🔴 **UNANSWERED, asked twice:** his coinflip has a **rigged
+  branch above 100,000 coins** that appends the losing side to the chance list, stacking the odds against rich
+  players — anti-inflation or a joke? ⇒ **Default plan: leave it OUT and document it with his exact lines**,
+  because a rig players cannot see erodes trust in an economy; if he wants it, it should be visible. Then
+  **blackjack** (needs ephemeral hands so players cannot see each other's cards; `player_hand` was
+  module-level so it hosted one game bot-wide), then wordle and minesweeper. ⏭ Ote's own legacy row is still
+  unimported — `/whoami` provisioned him fresh before the import, and `/whoami` has since been deleted. His
+  legacy figures: 925 coins, level 23, 131 catches, dog×1, recoverable with
+  `import-legacy-players.mjs --yes --overwrite`.
