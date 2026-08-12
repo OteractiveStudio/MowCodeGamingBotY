@@ -665,3 +665,50 @@ admin-gated half of `server_settings_cog`.
   bot supported 64 languages through a translation layer; `mst_guild.lang` is already stored and unused),
   **selling items back** (his had no sell either), **prefix commands** (`mst_guild.prefix` and
   `bot.default_prefix` are stored and read by nothing), or a **supervisor** so `restart` becomes possible.
+
+## 2026-08-13 (last) — /feedback, and the one table that must NOT cascade
+
+Ote: *"add abother feature there \\feedback msg:[strings] — record feedbacks to a pg table, so user adn
+feedback our new system. also hold the process while we in dev for me. start, push command for me"*.
+
+- **`/feedback msg:…` → `log_feedback`** (migration **006**). Every game in this port has at least one number
+  that was a judgement call, so the cheapest way to find out which calls were wrong is to let the people
+  playing it say so where they already are.
+- 🔑 **THE TABLE HAS NO FOREIGN KEY TO `mst_player`, DELIBERATELY** — the one decision in this feature
+  worth arguing about. Every other player-owned table declares
+  `REFERENCES mst_player (discord_id) ON DELETE CASCADE`, which is correct for balances and inventories: when a
+  player is gone, so is their stuff. **Feedback is not their stuff — it is a message TO US**, and its whole
+  value is that it outlives the state it was complaining about. **Every player row in this schema was
+  deliberately deleted earlier the same day**, and had this table existed with a cascading key, *every piece of
+  feedback would have gone with them*. So the author is a shape-checked plain id plus a `username_at_time`
+  snapshot, and a row reads on its own without joining to a player who may not exist. The cost — an id here can
+  be orphaned — is the intended trade, and it is written into the migration header so it is not "fixed" later.
+- ⭐ **EPHEMERAL, and via the mechanism that actually works.** `defer: "ephemeral"` on the command, not
+  `flags` on the reply — TRAPS #14, which had caught me on `/admin` an hour earlier. It matters more here than
+  anywhere: the confirmation quotes the message back, so a public reply would republish something someone chose
+  to send privately. Feedback is frequently *about* other players.
+- ⚠️ **Rate-limited 5 per hour, counted from real rows**, not an in-memory tally. An in-memory counter resets
+  on restart, which is exactly when somebody spamming would try again. A free-text box in a bot sitting in ten
+  servers is an invitation.
+- ⭐ **Read it with `/admin feedback [status] [limit]`** — a tally line, the newest entries, and a **Mark all as
+  read** button. The mark is **idempotent and scoped to `status = 'new'` in SQL**, so a double-click cannot
+  overwrite the `handled_by` of something already dealt with. A SQL CHECK requires `handled_by` and `handled_at`
+  to be set together or not at all, and that constraint was **verified to fire** rather than assumed.
+- ⚠️ **Messages are tidied before storage**: CRLF normalised, trailing whitespace per line removed, and runs of
+  three or more blank lines collapsed to one break. Without that last one a wall of newlines passes the SQL
+  length CHECK (which trims) while rendering as an embed full of nothing — "valid in SQL" is not "displayable".
+  Length is measured **after** tidying, so padding can neither sneak a too-short message through nor push a
+  legal one over the limit.
+- 🔑 **THE ADMIN GATE TEST CAUGHT THE NEW SUBCOMMAND, exactly as designed.** Adding
+  `/admin feedback` failed `admin-gate.test.mjs` with *"a new subcommand must be added to this test's
+  SUBCOMMANDS list"* — so the new branch could not be added without being enrolled in the
+  no-path-reaches-the-database-ungated check. That is the test doing the job it was written for a few hours
+  earlier, and worth recording as evidence the shape works.
+- **318 checks pass** (up from 304 — 14 new), 14 cogs, 18 commands, 13 tables. Verified end to end against the
+  real database: two submissions stored with newlines collapsed, the rate counter reading them back, the tally,
+  the mark-read (2 rows, then 0 on a second click), `handled_by`/`handled_at` populated, the pairing CHECK
+  firing when they were unset, and — the point of the whole design — **feedback surviving a
+  `DELETE FROM mst_player`**.
+- ⏭ Not built, and deliberately: no per-row status change (`actioned`/`declined` exist in the CHECK and only
+  `read` is reachable from the UI), and no notification to admins on arrival. Both are easy later; neither was
+  asked for.

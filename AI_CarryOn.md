@@ -10,7 +10,7 @@
 ## ▶▶ START HERE
 
 **The bot is LIVE in Ote's server, the game loop works, and SEVEN games are playable.**
-13 cogs · **17 commands** · 12 tables · **304 tests** · 31 commits on `main`.
+14 cogs · **18 commands** · 13 tables · **318 tests** · 32 commits on `main`.
 ⛔ **`mst_player` is EMPTY — the economy was deliberately started over on 2026-08-13.** See DECIDED.
 
 🔑 **RUN IT WITH `run_windows.bat`** (or `node main.js`), **NEVER `npm start`** — see TRAPS #9. npm runs the
@@ -22,9 +22,9 @@ how the run script tells our bot apart from any other Node process on the machin
 ```bash
 npm install
 cp config.example.json config.json    # token + DB password go here; gitignored
-npm run db:migrate                    # 001-005 — idempotent
+npm run db:migrate                    # 001-006 — idempotent
 npm run db:seed                       # fish, items, market, 2004 wordle words — idempotent
-npm test                              # 304 checks, real exit code
+npm test                              # 318 checks, real exit code
 npm run bot:register                  # ONLY after changing a SlashCommandBuilder
 run_windows.bat                       # or: node main.js  (NEVER npm start)
 ```
@@ -39,7 +39,7 @@ Ote's instruction. Its token is in `config.json` via `DevTools/maintenance/use-l
 |---|---|
 | ✅ **Live** | Logged in as `MowCodeGamingBot#1501`, 10 guilds. Commands invoked by Ote for real. |
 | ✅ **Stack** | JS ESM · discord.js **14.27** · pg · Sequelize 6 · Node 24. **No Fastify** (removed). |
-| ✅ **Database** | `discord_app` on `127.0.0.1:54322`, schema **`mowcodegamingbot_y`**, applied as the app role (not a superuser). **12 tables.** |
+| ✅ **Database** | `discord_app` on `127.0.0.1:54322`, schema **`mowcodegamingbot_y`**, applied as the app role (not a superuser). **13 tables.** |
 | ✅ **Economy** | Coins, exp, level, crystals. Cascade is pure + unit-tested. Every mutation writes `log_economy` **in the same transaction**. 🔑 Measured: legacy read-modify-write lost **147 of 150** coins under 50 concurrent credits; this loses **0**. |
 | ✅ **Fishing** | Weighted draw (`10 - tier`), 9 fish, 66 total weight. `auto` = 30 rods in **ONE transaction**. **His animation is restored**, with his own `rod_left < 21` throttle. |
 | ✅ **Market** | **Public click-through**: full contents visible, direct buttons per section and item, quantity buttons, modal for a custom amount, **Close** button. Owner-gated — anyone may click, non-owners get a private rejection. |
@@ -53,6 +53,7 @@ Ote's instruction. Its token is in `config.json` via `DevTools/maintenance/use-l
 | ✅ **MESSAGE CONTENT intent is ENABLED** on the legacy application | Verified by a successful login with it requested (`wired 4 event binding(s)`). ⚠️ Requesting it without the portal toggle makes **login itself fail**; `app/bot/index.js` catches that, rebuilds without it, and says which switch to flip. Flag: `discord.message_content_intent`. |
 | ⛔ **Legacy players — IMPORTED, THEN DELETED** | **The economy started over on 2026-08-13.** All 24 imported players and their history were removed; see DECIDED. `mst_player` is **empty**. Everyone is provisioned fresh at 200 coins on their next command. **Do not re-import** — `import-legacy-players.mjs` now refuses. |
 | ✅ **Admin tools** | `/admin money · player · reset · fish · stats · cogs`. ⭐ **ONE gate** at the top of `execute()`, not per-branch — his `data` re-tested `is_admin` in every branch and his **`file` command forgot entirely**, so anyone in any of 12 servers could list and download files off the host. 🔑 **`log_economy.actor_id` is finally written** — unused since migration 002 — so an `admin_adjust` names *who* did it. ⚠️ `/admin money` grants **NO exp by default** (his `money_add` always did, so a 10,000 top-up would have handed out ~13 levels); opt in with `grant_exp:true`. Reset is button-confirmed with the target in the customId, so there is **no pending-confirmation state to strand**, and admin is **re-checked on the click** because a customId is client-supplied. |
+| ✅ **Feedback** | `/feedback msg:…` → `log_feedback`, at Ote's request: *"record feedbacks to a pg table, so user adn feedback our new system"*. **Ephemeral** (`defer: "ephemeral"`) because feedback is often *about* other players. Rate-limited **5 per hour**, counted from real rows so a restart does not reset it. 🔑 **NO foreign key to `mst_player` — deliberately.** Every other player table cascades, which would have meant the 2026-08-13 player wipe **deleted all feedback**; a `username_at_time` snapshot keeps a row readable after its author's row is gone. Read it with `/admin feedback [status] [limit]`, which has a **Mark all as read** button (idempotent, scoped to `status='new'` in SQL). |
 | ✅ **Drift check** | On boot, compares the published command list to the code and names what differs. Verified live. |
 
 ## ❌ What does NOT exist

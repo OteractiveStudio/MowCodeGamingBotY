@@ -65,6 +65,7 @@ import { isBotAdmin, botAdminIds } from "../../bot/permissions.js";
 import { ensurePlayer, getPlayerWithState } from "../../data/player.js";
 import { addMoney, getState, toInt, expCap } from "../../data/economy.js";
 import { getInventory } from "../../data/inventory.js";
+import { feedbackTally, listFeedback, markAllRead } from "../../data/feedback.js";
 
 const COIN = "🪙";
 
@@ -138,6 +139,31 @@ export default {
                             o.setName("value").setDescription("The new value.").setRequired(true).setMinValue(0),
                         ),
                 )
+                .addSubcommand((sub) =>
+                    sub
+                        .setName("feedback")
+                        .setDescription("Read what players have sent through /feedback.")
+                        .addStringOption((o) =>
+                            o
+                                .setName("status")
+                                .setDescription("Which to show. Default: everything, newest first.")
+                                .setRequired(false)
+                                .addChoices(
+                                    { name: "new — not looked at yet", value: "new" },
+                                    { name: "read", value: "read" },
+                                    { name: "actioned", value: "actioned" },
+                                    { name: "declined", value: "declined" },
+                                ),
+                        )
+                        .addIntegerOption((o) =>
+                            o
+                                .setName("limit")
+                                .setDescription("How many. Default 10, max 25.")
+                                .setRequired(false)
+                                .setMinValue(1)
+                                .setMaxValue(25),
+                        ),
+                )
                 .addSubcommand((sub) => sub.setName("stats").setDescription("Bot and database health."))
                 .addSubcommand((sub) => sub.setName("cogs").setDescription("What is loaded right now.")),
 
@@ -183,6 +209,7 @@ export default {
                 if (sub === "player") return showPlayer(interaction, ctx);
                 if (sub === "reset") return askReset(interaction, ctx);
                 if (sub === "fish") return setFish(interaction, ctx);
+                if (sub === "feedback") return showFeedback(interaction, ctx);
                 if (sub === "stats") return showStats(interaction, ctx);
                 return showCogs(interaction, ctx);
             },
@@ -204,6 +231,7 @@ export default {
         }
 
         if (action === "reset-confirm") return doReset(interaction, ctx, argument);
+        if (action === "feedback-read") return doMarkRead(interaction, ctx);
         if (action === "reset-cancel") {
             await interaction.update({
                 content: "Cancelled. Nothing was changed.",
@@ -626,6 +654,104 @@ async function setFish(interaction, ctx) {
 
     await ctx.log(
         `admin: ${interaction.user.id} set fish ${key}.${field} = ${value}`,
+        "warning",
+        import.meta.url,
+    );
+}
+
+// ── feedback ─────────────────────────────────────────────────────────────────
+
+const STATUS_ICON = { new: "🆕", read: "👀", actioned: "✅", declined: "🚫" };
+
+/**
+ * Read what players sent through `/feedback`.
+ *
+ * ⚠️ Ephemeral like every other admin read — feedback is often ABOUT other players, and
+ * reprinting it into a channel would republish something someone chose to send privately.
+ * `announce()` is deliberately not used here.
+ */
+async function showFeedback(interaction, ctx) {
+    const status = interaction.options.getString("status") ?? null;
+    const limit = interaction.options.getInteger("limit") ?? 10;
+
+    const [rows, tally] = await Promise.all([
+        listFeedback(ctx.db, { status, limit }),
+        feedbackTally(ctx.db),
+    ]);
+
+    const embed = new EmbedBuilder()
+        .setColor(tally.new > 0 ? 0xf1c40f : 0x95a5a6)
+        .setTitle("📮 Feedback")
+        .setDescription(
+            `🆕 **${tally.new}** new · 👀 ${tally.read} read · ✅ ${tally.actioned} actioned · ` +
+            `🚫 ${tally.declined} declined · **${tally.total}** in total`,
+        );
+
+    if (rows.length === 0) {
+        embed.addFields({
+            name: status ? `Nothing with status "${status}"` : "Nothing yet",
+            value: "Players send it with `/feedback`.",
+        });
+    } else {
+        // ⚠️ Embeds cap at 25 fields and 6000 characters overall, so each entry is trimmed and the
+        // list is capped at 25 by the option. A silent truncation would read as "that is all of
+        // it", which is the failure mode this project keeps flagging.
+        for (const row of rows) {
+            const when = new Date(row.created_at).toISOString().replace("T", " ").slice(0, 16);
+            const body = row.message.length > 300 ? `${row.message.slice(0, 300)}…` : row.message;
+            embed.addFields({
+                name: `${STATUS_ICON[row.status] ?? "•"} #${row.rolling_id} — ${row.username_at_time ?? "unknown"} · ${when}`,
+                value:
+                    `${body}\n_<@${row.discord_id}>` +
+                    (row.handled_by ? ` · handled by <@${row.handled_by}>` : "") +
+                    "_",
+            });
+        }
+
+        embed.setFooter({
+            text:
+                `Showing ${rows.length}${status ? ` with status "${status}"` : ""}, newest first.` +
+                (tally.total > rows.length ? ` ${tally.total - rows.length} more exist.` : ""),
+        });
+    }
+
+    const components =
+        tally.new > 0
+            ? [
+                  new ActionRowBuilder().addComponents(
+                      new ButtonBuilder()
+                          .setCustomId("admin:feedback-read")
+                          .setLabel(`Mark all ${tally.new} new as read`)
+                          .setEmoji("👀")
+                          .setStyle(ButtonStyle.Primary),
+                  ),
+              ]
+            : [];
+
+    await respond(interaction, { embeds: [embed], components });
+}
+
+/**
+ * Move every `new` row to `read`.
+ *
+ * ⚠️ Scoped to `status = 'new'` in SQL, so it is idempotent: a second click marks nothing and
+ * cannot overwrite the `handled_by` of something already dealt with. Deliberately NOT a
+ * per-row action — the useful gesture after reading a list is "I have seen all of these".
+ */
+async function doMarkRead(interaction, ctx) {
+    const marked = await markAllRead(ctx.db, interaction.user.id);
+
+    await interaction.update({
+        content:
+            marked > 0
+                ? `Marked **${marked}** as read, against your name.`
+                : "Nothing was still new — someone else may have just done it.",
+        embeds: [],
+        components: [],
+    });
+
+    await ctx.log(
+        `admin: ${interaction.user.id} marked ${marked} feedback row(s) as read`,
         "warning",
         import.meta.url,
     );

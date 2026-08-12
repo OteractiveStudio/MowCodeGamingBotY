@@ -37,6 +37,7 @@ whole-file read-modify-write      →   one atomic statement per mutation
 | `/blackjack` · `/bj` | Blackjack against the dealer — buttons for hit, stand, double down, surrender |
 | `/wordle start` · `board` · `rules` | Guess the hidden word — **type guesses in chat**, 4-6 letters, 6 tries |
 | `/admin money` · `player` · `reset` · `fish` · `stats` · `cogs` | Owner tools, behind one gate |
+| `/feedback msg:…` | Tell the maintainers what you think — private, and stored |
 | `/ping` · `/about` | Liveness, and the credits |
 
 **The core loop works**: buy rods → fish → earn coins and exp → level up → buy more. On the original's rules,
@@ -239,6 +240,22 @@ belongs in a maintenance script that takes a backup first rather than in a chat 
 because ES modules cache by URL and that cache cannot be invalidated — a reload would import nothing and report
 success, which is worse than not offering it.
 
+### Built: feedback
+
+`/feedback msg:…` records what a player thinks straight into Postgres. It answers **privately**, because
+feedback is often about *other* players and a public "thanks!" would quote the message back into the channel.
+It is rate-limited to five an hour, counted from real rows rather than an in-memory tally — an in-memory one
+resets on restart, which is exactly when someone spamming would try again. Maintainers read it with
+`/admin feedback`, which can filter by status and mark a batch as read.
+
+⭐ **The feedback table deliberately has no foreign key to the player table**, which is the one interesting
+decision in it. Every other player-owned table cascades on delete, and that is right for balances and
+inventories: when a player is gone, so is their stuff. Feedback is not their stuff — it is a message *to the
+maintainers*, and its whole value is that it outlives the state it was complaining about. Every player row in
+this database was deliberately deleted a day before this feature was written; had it existed with a cascading
+key, every piece of feedback would have gone with them. A snapshot of the author's username is stored alongside
+the id so a row still reads on its own.
+
 ### Still to port
 
 A **minesweeper** generator — the oldest file in the original, from 2020, written before any of it was a
@@ -309,7 +326,7 @@ That is what a database fixes, and it is the actual point of this project.
 **It is live and being played.** The bot runs in a real server on a real database.
 
 ✅ Economy, progression, fishing, market and inventory — all on the original's numbers · ✅ **seven games**:
-guess, OX, stealing, coinflip, dice, blackjack and wordle · ✅ a ledger that reconciles · ✅ **304 tests** against the real database, one command,
+guess, OX, stealing, coinflip, dice, blackjack and wordle · ✅ a ledger that reconciles · ✅ **318 tests** against the real database, one command,
 real exit code.
 
 **The economy starts from zero.** All 24 original players were imported, then deliberately removed: looking at
@@ -329,7 +346,7 @@ npm install
 cp config.example.json config.json     # then fill it in — see below
 npm run db:migrate                     # create the schema (idempotent, safe to re-run)
 npm run db:seed                        # load the fish, items and market (also idempotent)
-npm test                               # 304 checks, real exit code
+npm test                               # 318 checks, real exit code
 npm run bot:register                   # publish slash commands to Discord
 node main.js                           # NOT npm start — see below
 ```
@@ -371,7 +388,8 @@ app/
     dice/                   /dice                         (typed call + autocomplete)
     blackjack/              /blackjack, /bj
     wordle/                 /wordle start | board | rules  (+ typed guesses)
-    admin/                  /admin money | player | reset | fish | stats | cogs
+    admin/                  /admin money | player | reset | fish | feedback | stats | cogs
+    feedback/               /feedback
     guild/                  /server, and join/leave provisioning
     system/                 /ping, /about
   data/                     the only code that reads or writes rows

@@ -28,6 +28,7 @@ import mstFishModel from "./mst_fish.model.js";
 import txnPurchaseModel from "./txn_purchase.model.js";
 import logEconomyModel from "./log_economy.model.js";
 import mstWordleWordModel from "./mst_wordle_word.model.js";
+import logFeedbackModel from "./log_feedback.model.js";
 
 export default function initModels(sequelize, schemas) {
     /**
@@ -36,6 +37,7 @@ export default function initModels(sequelize, schemas) {
      */
     const choices = {
         log_message_level: ["debug", "info", "warning", "error"],
+        feedback_status: ["new", "read", "actioned", "declined"],
         fish_type: ["creature", "not_creature"],
         economy_reason: [
             "provision",
@@ -66,6 +68,7 @@ export default function initModels(sequelize, schemas) {
         mst_market_listing: mstMarketListingModel(sequelize, DataTypes, schemas, choices, hooks),
         mst_fish: mstFishModel(sequelize, DataTypes, schemas, choices, hooks),
         mst_wordle_word: mstWordleWordModel(sequelize, DataTypes, schemas, choices, hooks),
+        log_feedback: logFeedbackModel(sequelize, DataTypes, schemas, choices, hooks),
         txn_purchase: txnPurchaseModel(sequelize, DataTypes, schemas, choices, hooks),
         log_economy: logEconomyModel(sequelize, DataTypes, schemas, choices, hooks),
     };

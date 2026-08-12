@@ -90,13 +90,13 @@ function fakeCtx({ admins, label }) {
     };
 }
 
-const SUBCOMMANDS = ["money", "player", "reset", "fish", "stats", "cogs"];
+const SUBCOMMANDS = ["money", "player", "reset", "fish", "feedback", "stats", "cogs"];
 
 const command = adminCog.commands[0];
 
 export default [
     {
-        label: "the cog declares exactly one command with all six subcommands",
+        label: "the cog declares exactly one command, and EVERY subcommand is in the gate list below",
         fn: () => {
             assert.equal(adminCog.commands.length, 1);
             const json = command.data.toJSON();
