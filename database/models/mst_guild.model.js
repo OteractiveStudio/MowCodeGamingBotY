@@ -22,7 +22,7 @@ export default (sequelize, DataTypes, schemas) =>
                 type: DataTypes.TEXT,
                 allowNull: false,
                 defaultValue: "+",
-                comment: "NOT USED YET — the command surface (slash vs prefix) is undecided",
+                comment: "Read by the old-prefix redirect in app/cogs/utility/index.js — typing it points at the slash command",
             },
             lang: {
                 type: DataTypes.TEXT,
